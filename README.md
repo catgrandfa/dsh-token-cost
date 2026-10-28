@@ -1,0 +1,240 @@
+# dsh-token-cost
+
+> DSH（DeepSeek Harness）的 **Token 花费面板**：今天花了多少钱、花在哪、缓存省了多少、预算还剩多少。
+> 兼容 DSH 0.2.x，**零外部依赖**（自带多帧 zstd 解码，不需要 `zstd` / Homebrew）。
+
+[English](README.en.md) | 中文
+
+> 本插件是社区插件，并非 DeepSeek 官方插件；与深度求索（DeepSeek）无隶属、合作或背书关系。
+> 面板金额是**本机估算**，不是官方账单；价格与计费规则以[官方定价页](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)为准。
+
+---
+
+## 这是什么
+
+本项目派生自社区插件 [`dsh-token-meter-panel`](https://github.com/olimc2016/dsh-token-meter-panel)（MIT，0.6.7），
+保留其采集 / 计价 / 官方取数内核，**重做了面板 UI** 并新增了预算预测、月度预算、按模型明细、
+CSV/JSON 导出与独立 CLI 报表。
+
+DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 token、不算钱**。这个插件把用量翻译成钱：
+
+- **今日消费**、近 7 天 / 近 30 天 / 本月花费与账户余额
+- **预算进度**：每日预算 + 本月预算 + 按当前时段外推的「预计今日花费」
+- **钱花在哪**：缓存命中输入 / 未命中输入 / 输出各自花了多少，以及按模型、按会话、按 provider 的排行
+- **缓存省了多少**：DeepSeek 缓存命中价只有未命中的 1/50 ~ 1/30，这个数字通常很大
+- **可带走**：面板一键导出 CSV / JSON；不启动 DSH 也能用 `node tools/report.mjs` 出报表
+
+![总览](docs/preview-overview.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/preview-detail.png" alt="明细：按模型、按会话、搜索与占比"></td>
+<td width="50%"><img src="docs/preview-export.png" alt="导出：CSV/JSON 下载、CLI 报表与 HTTP 接口"></td>
+</tr>
+<tr>
+<td align="center"><sub>明细：按模型 / 按会话 / 按 provider</sub></td>
+<td align="center"><sub>导出：面板下载 + CLI 报表 + HTTP 接口</sub></td>
+</tr>
+</table>
+
+> 截图由 `node tools/preview.mjs --demo` 用**合成数据**渲染，不含任何真实会话、路径或余额。
+
+---
+
+## 功能
+
+| 视图 | 内容 |
+|---|---|
+| **总览** | 今日消费（官方 / 本地口径标注）、较昨日、当日预测、每日 / 本月预算进度、余额、近 7/30 天与本月金额、token 四宫格、命中率、单次花费、成本构成、峰谷价表、30 天趋势、24 小时分时、本会话实时 |
+| **明细** | 今日 / 近 7 天 / 近 30 天切换；按模型消费与占比、按会话明细（可搜索、子代理打标）、按 provider 汇总 |
+| **导出** | 按天 / 按会话 / 按模型 × 今日 / 7 天 / 30 天 / 全部 × CSV / JSON，一键下载；附 CLI 与 HTTP 接口示例 |
+
+其他能力：
+
+- **峰 / 谷分档计价**：高峰（北京时间工作日 9:00–12:00、14:00–18:00）与空闲档分别记账再汇总
+- **官方对账**：可选接入 DeepSeek 账号会话或 `platform.deepseek.com` 网页登录态，按天金额与平台用量页同源
+- **余额**：桌面端账号登录或 `DEEPSEEK_API_KEY` 双路；账号路径还能读累计消费
+- **面板内改设置**：预算 / 低余额阈值点一下就能改，写回 DSH 设置
+- **皮肤**：`default`（跟随 DSH 主题）/ `glass`（液态玻璃）
+- **零配置出数**：不需要 API Key、不需要外部解压工具；装好重启 DSH 即可
+
+---
+
+## 安装
+
+### 方式一：GitHub 直装（推荐，固定版本）
+
+```bash
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.1.0
+```
+
+`web` profile 同理，把 `--profile desktop` 换成 `--profile web`。
+
+### 方式二：一键脚本
+
+**macOS / Linux**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/catgrandfa/dsh-token-cost/main/install.sh | bash
+```
+
+**Windows（PowerShell）**
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/catgrandfa/dsh-token-cost/main/install.ps1 | iex"
+```
+
+### 方式三：从源码（开发者）
+
+```bash
+git clone https://github.com/catgrandfa/dsh-token-cost.git
+cd dsh-token-cost
+npm install --cache /tmp/dsh-npm-cache
+npm run setup     # 链接 DSH 本体里的 @deepseek-ai/* 与 esbuild（仅开发需要）
+npm test
+dsh plugin --profile desktop add .
+```
+
+> 装完**必须完全退出并重启 DSH**：插件 bundle 只在宿主启动时解析。
+> 重启后侧栏最下方出现「Token」入口，点开就是面板。
+
+**与上游插件共存**：本插件的包名、路由前缀（`/token-cost`）、设置命名空间（`token-cost`）、
+侧栏 slot id（`tokencost`）全部独立，可以和 `dsh-token-meter-panel` 同时安装、互不冲突。
+
+---
+
+## 计费口径
+
+按 **DeepSeek 官方定价**折算人民币（CNY），**不是** DSH 内置能力：
+
+- 现售模型：`deepseek-flash`、`deepseek-v4-pro`
+  （`deepseek-chat` / `deepseek-reasoner` 已下线；旧的 `deepseek-v4-flash` 名称仍可用，按 Flash 价计费）
+- **分高峰 / 空闲两档，空闲价 = 高峰价的一半**
+- 高峰 = 北京时间周一至周五 9:00–12:00、14:00–18:00（本插件不识别法定节假日）
+- `reasoningTokens` 已包含在 `outputTokens` 内，不重复计价
+- **未知模型不猜价**：只累加 token，不计金额
+- 价格来源：<https://api-docs.deepseek.com/zh-cn/quick_start/pricing>（内置价采集于 2026-09-19）
+
+费率、每日预算、月度预算、告警阈值、刷新间隔、是否显示余额，都可以在
+**设置 → 插件 → token-cost** 里改；改完立刻生效。
+
+---
+
+## 数据从哪来
+
+1. **本地日志聚合**（按天 / 按会话 / 按模型的唯一来源）
+   扫描 `$DSH_HOME/sessions/<工作区>/<会话>/session[.vN].jsonl[.zstd]`，
+   取每条 `assistant/message` 的 `data.usage`，按北京时间分桶。`.jsonl.zstd` 是追加写入的
+   多帧 zstd，插件用纯 JS 按帧边界解码（`src/zstd.mjs`），因此不需要系统装 `zstd`。
+2. **官方用量**（可选，按天金额优先来源）
+   桌面端已登录时走 DSH 账号会话（`x-dsh-auth-token`，免网页登录）；否则尝试读取浏览器里
+   `platform.deepseek.com` 的 `userToken`。数据与平台「用量」页同源。
+3. **余额 / 累计消费**：账号服务或 `api.deepseek.com/user/balance`。
+
+### 已知盲区
+
+- 会话标题生成、联网搜索这两类调用**不落 usage**，无法计入花费
+- 活跃会话仍在追加写入，所以「今日」是**下界**（面板底部有标注）
+- 本地金额与官方账单允许几分差异；对账请以官方账单页为准
+
+---
+
+## 导出与 CLI
+
+### 面板导出
+
+「导出」视图选择 **数据 × 范围 × 格式** 后点下载。导出内容只有 token 数、金额、调用次数、
+会话标题 / 工作区等聚合字段，**不含对话正文、文件路径或凭据**。
+
+HTTP 接口（与面板同源，需要 DSH 登录态）：
+
+```bash
+GET /token-cost/export?dataset=daily&scope=7d&format=csv
+GET /token-cost/export?dataset=sessions&scope=30d&format=json
+GET /token-cost/export?dataset=models&scope=all&format=csv
+```
+
+### 命令行报表
+
+不启动 DSH 也能用（只依赖 Node 内置模块）：
+
+```bash
+node tools/report.mjs --days 7 --top 5        # 人类可读：汇总 + 每日 + 模型 + 会话
+node tools/report.mjs --json                  # 机器可读 JSON
+node tools/report.mjs --csv daily             # daily | sessions | models
+node tools/report.mjs --budget 5              # 今日预算使用率
+node tools/report.mjs --sessions-root ~/.dsh/sessions
+```
+
+---
+
+## 隐私与权限
+
+先给结论：**只读本机会话日志；不执行命令；不写业务文件；凭据只在宿主进程内存中使用。**
+
+| 权限 | 实际情况 |
+|---|---|
+| 文件（读） | 只读 `$DSH_HOME/sessions/**/session[.vN].jsonl[.zstd]` |
+| 文件（写） | 无（导出由浏览器下载，聚合只在内存） |
+| 网络 | ① 官方用量 / 余额（可在设置里关）；② 版本检查（GitHub Releases，可关自动更新） |
+| 命令执行 | 无（唯一 spawn 是「后台自动更新」调用 `dsh plugin add`，默认开启但只在本插件运行 60s 后、发现新版本时执行一次；可在设置里关） |
+| 凭据 | 仅按引用名（`DEEPSEEK_API_KEY` / `DEEPSEEK_PLATFORM_TOKEN`）向 DSH 凭据服务取值，不下发到浏览器、不写日志、不进文件 |
+
+浏览器登录态读取（可选）：只把 Chromium 系浏览器的 `Local Storage/leveldb` **复制到系统临时目录**再解析，
+解析完立即删除；只取 `platform.deepseek.com` 这一条记录，不外发、不落盘。
+
+---
+
+## 兼容性与限制
+
+- DSH 0.2.x（0.2.0-rc.2 实测）；Node ≥ 22.19
+- 平台：macOS 实测；Windows / Linux 由 CI 自检覆盖
+- 金额为估算，不能替代官方账单
+- 暂无 npm 发行；安装走 GitHub（源码或 Release tarball）
+
+---
+
+## 开发
+
+```bash
+npm install --cache /tmp/dsh-npm-cache
+npm run setup          # 链接 @deepseek-ai/* 与 esbuild
+npm run build          # 构建 lib/client.js（改 src/client/** 后必须执行）
+npm test               # verify-* / smoke-* / report 全套自检
+node tools/preview.mjs --demo --view overview   # 合成数据预览（不改真实日志）
+node tools/preview.mjs --open                   # 真数据预览，直接开浏览器
+```
+
+产物 `lib/client.js` 需要入库；宿主半侧改动必须重启 DSH 才生效。
+
+目录结构：
+
+```
+├── package.json          # dsh.bundle.patch（宿主层）+ dsh.client（浏览器层）
+├── cordis.patch.yml      # 把宿主半侧插进 profile 层栈
+├── lib/index.js          # 宿主半侧：路由、设置、官方用量 / 余额、更新检查
+├── lib/client.js         # 浏览器半侧（esbuild 产物，勿手改）
+├── src/core.mjs          # 采集内核：扫描 / 聚合 / 计价 / dayModels
+├── src/zstd.mjs          # 多帧 zstd 解码
+├── src/client/index.js   # 三视图面板源码（改这个）
+├── tools/report.mjs      # 独立 CLI 报表
+├── tools/preview.mjs     # 预览 / 截图（--demo 合成数据）
+├── docs/                 # 截图
+└── THIRD-PARTY-NOTICES.md
+```
+
+---
+
+## 许可
+
+本项目以 **MIT** 许可证发布，见 [LICENSE](LICENSE)。
+
+它派生自 [`dsh-token-meter-panel`](https://github.com/olimc2016/dsh-token-meter-panel)
+（MIT，`Copyright (c) 2026 oli20`）；`src/zstd.mjs` 的帧扫描逻辑改写自 DSH 的
+`@deepseek-ai/dsh-session-persistence-jsonl`（MIT，`Copyright (c) 2026 DeepSeek`）。
+完整声明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+## 致谢
+
+- 上游作者 [oli20](https://github.com/olimc2016)：采集内核、计费口径、官方取数与工程实践
+- DeepSeek Harness 团队：插件机制、会话日志格式与多帧 zstd 实现

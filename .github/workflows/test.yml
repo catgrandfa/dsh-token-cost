@@ -1,0 +1,42 @@
+# 跨平台自检：push / PR 时在 Linux 与 Windows 两套 runner 上都跑一遍 npm test。
+#
+# 这些用例覆盖采集（多帧 zstd / 日志代际 / provider 与费率）、宿主路由
+# （summary / balance / settings / export / health）、客户端 bundle 与渲染门禁，
+# 以及独立 CLI 报表。干净 runner 上没有本地会话日志时，相关自检会自动跳过。
+name: test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dev deps
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      # 干净 runner 上没有本地 DSH profile，schemastery 由 npm install 提供；
+      # setup 只在有 profile 的开发机上才有意义，因此这里不跑它。
+      - name: Test
+        run: npm test
+
+      # lib/client.js 是提交进仓库的构建产物。这里从源码重建一次并让烟测跑新产物，
+      # 用来抓「src/client/index.js 坏了但 lib/client.js 还是旧的」这种状态。
+      # 刻意**不**做 git diff 断言：仓库没有 lockfile，esbuild 小版本漂移会让产物字节不同。
+      - name: Rebuild client bundle from source and smoke it
+        run: |
+          npm run build
+          node tools/smoke-client.mjs
