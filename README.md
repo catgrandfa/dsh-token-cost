@@ -69,7 +69,7 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 ### 方式一：GitHub 直装（推荐，固定版本）
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.0
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.1
 ```
 
 `web` profile 同理，把 `--profile desktop` 换成 `--profile web`。
