@@ -56,6 +56,20 @@ node tools/preview.mjs --demo --view detail   # 合成数据预览（不启动�
 
 ≤3 个文件、≤200 行改动；构建 + 全套测试 **1 次**；真机验证 **1 次**（攒批做）；外部调研 0~1 次。
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in the repo's GitHub Issues (`catgrandfa/dsh-token-cost`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
 ## 权威文档
 
 - 使用与安装：`README.md` / `README.en.md`
