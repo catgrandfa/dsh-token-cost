@@ -32,7 +32,7 @@ export PATH="$HOME/.nvm/versions/node/v22.23.4/bin:$PATH"   # 本机 node 由 nv
 npm install --cache /tmp/dsh-npm-cache                       # 依赖装到工作区；~/.npm 在沙箱外
 npm run setup       # 链接 @deepseek-ai/*（来自 DSH profile）+ esbuild
 npm run build       # 构建 lib/client.js（改 src/client/** 必须跑）
-npm test            # 9 项自检（verify-* / smoke-* / report）
+npm test            # 10 项自检（verify-* / smoke-* / report）
 npm run report      # 人类可读 CLI 报表
 node tools/preview.mjs --demo --view detail   # 合成数据预览（不启动浏览器）
 ```

@@ -641,9 +641,11 @@ Object.assign(zh, {
   'accountQuota': '账号额度',
   'apiKeyQuota': 'API Key',
   'thirdChannel': '第三方渠道',
+  'toolBillingTag': '单独计费',
+  'toolSearchRow': 'Search 工具调用',
   'channelToday': '今日',
   'channel30d': '近 30 天',
-  'channelNote': '官方渠道拆两条：账号额度（账号登录）与 API Key（不占账号额度）；金额来自本地日志、按官方价估算。第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。',
+  'channelNote': '官方渠道拆两条：账号额度（账号登录）与 API Key（不占账号额度）；金额来自本地日志、按官方价估算。第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。工具调用（Search）另按次计费、未计入上面的 token 金额：2026-11-01 起 5 元/千次成功请求，之前免费；按本地 web_search 调用次数估算，一次调用可能对应多次服务端搜索。',
   'historyLink': '按天历史 →',
   'customRateTag': '自定义价',
   'thirdPartyRateNote': 'GLM / Kimi 等第三方模型按明细里的固定单价计费，不适用 DeepSeek 峰谷价；官方峰谷价表只用于 DeepSeek token。',
@@ -726,9 +728,11 @@ Object.assign(en, {
   'accountQuota': 'Account quota',
   'apiKeyQuota': 'API key',
   'thirdChannel': 'Third-party channel',
+  'toolBillingTag': 'billed separately',
+  'toolSearchRow': 'Search tool calls',
   'channelToday': 'Today',
   'channel30d': 'Last 30 days',
-  'channelNote': 'Official splits in two: account quota (desktop sign-in) and API key (does not use the account quota); amounts come from local logs at official rates. Third-party = local logs with custom rates (built-in model rates when unset).',
+  'channelNote': 'Official splits in two: account quota (desktop sign-in) and API key (does not use the account quota); amounts come from local logs at official rates. Third-party = local logs with custom rates (built-in model rates when unset). Search tool calls are billed separately per successful request and are not included in the token totals above: CNY 5 per 1,000 requests from 2026-11-01 (free before), estimated from local web_search calls.',
   'historyLink': 'Daily history →',
   'customRateTag': 'custom rate',
   'thirdPartyRateNote': 'GLM / Kimi and other third-party models use their own flat per-model rates in the breakdown; the peak/off-peak table applies to DeepSeek tokens only.',
@@ -1227,6 +1231,16 @@ function TokenMeterPanel(props) {
   const channelRateKeys = data.config?.channelRates && typeof data.config.channelRates === 'object'
     ? Object.keys(data.config.channelRates) : [];
 
+  // 工具调用（Search）单独按次计费：本地日志里成功完成的 web_search 次数 × 官方单价，
+  // 2026-11-01 之前官方免费（见 core.mjs 的 SEARCH_BILLING_FROM），所以这里金额可能为 0。
+  // 单次工具调用在服务端可能触发多次搜索，本地只能按调用次数估算（下界）。
+  const searchDays = data.daysSearch ?? {};
+  const searchToday = searchDays[data.today] ?? { calls: 0, cny: 0 };
+  const searchSince = dayKeyOf(Date.now() - 29 * 86400000);
+  const search30 = Object.entries(searchDays).reduce((acc, [day, v]) => (day >= searchSince
+    ? { calls: acc.calls + (v?.calls ?? 0), cny: acc.cny + Number(v?.cny ?? 0) }
+    : acc), { calls: 0, cny: 0 });
+
   /** 明细的 provider 卡片跟着明细窗口走；没有 dayModels 的旧数据退回全历史 */
   const providerRows = (() => {
     const src = data.dayModels ?? {};
@@ -1594,21 +1608,39 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 12.5, color: C.label2, 
       h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
       h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13.5 } }, [
         tableHead([t('channelCol'), t('channelToday'), t('channel30d')]),
-        h('tbody', { key: 'tb' }, channelStats.map((row) => h('tr', { key: row.key }, [
-          h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
-            row.official
-              ? h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
-              : null,
-            // 官方两行分别是「账号额度」和「API Key」（走 API Key 不占账号额度），不能并成一行
-            row.official
-              ? (row.labelKey ? t(row.labelKey) : '')
-              : (row.provider || t('thirdChannel')),
-            !row.official && row.provider && channelRateKeys.includes(row.provider)
-              ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+        h('tbody', { key: 'tb' }, [
+          ...channelStats.map((row) => h('tr', { key: row.key }, [
+            h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+              row.official
+                ? h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
+                : null,
+              // 官方两行分别是「账号额度」和「API Key」（走 API Key 不占账号额度），不能并成一行
+              row.official
+                ? (row.labelKey ? t(row.labelKey) : '')
+                : (row.provider || t('thirdChannel')),
+              !row.official && row.provider && channelRateKeys.includes(row.provider)
+                ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+            ]),
+            h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
+            h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
+          ])),
+          // 工具调用（Search）单独计费：官方按成功请求收费，本地按成功调用次数估算；
+          // 2026-11-01 之前免费，所以金额可能是 0。这笔钱不并入上面的 token 金额。
+          h('tr', { key: 'tool-search' }, [
+            h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+              h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.warn, whiteSpace: 'nowrap' } }, t('toolBillingTag')),
+              t('toolSearchRow'),
+            ]),
+            h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label, whiteSpace: 'nowrap' }) }, [
+              money(searchToday.cny),
+              h('span', { key: 'c', style: { fontSize: 10.5, fontWeight: 400, color: C.label3, marginLeft: 4 } }, `${searchToday.calls} ${t('calls')}`),
+            ]),
+            h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2, whiteSpace: 'nowrap' }) }, [
+              money(search30.cny),
+              h('span', { key: 'c', style: { fontSize: 10.5, color: C.label3, marginLeft: 4 } }, `${search30.calls} ${t('calls')}`),
+            ]),
           ]),
-          h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
-          h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
-        ]))),
+        ]),
       ])),
       h('div', { key: 'note', style: { fontSize: 11.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
       ]),

@@ -216,6 +216,12 @@ function demoData() {
         'pi-ai': { calls: thirdParty.calls, tokens: thirdParty.tokens, cny: thirdParty.cny },
       },
       today: todayKey,
+      // 工具调用（Search）单独计费：演示数据里只放调用次数；11/1 前免费，金额为 0
+      daysSearch: Object.fromEntries(Array.from({ length: 5 }, (_, i) => {
+        const key = keyOf(now - i * 86400000);
+        return [key, { calls: i === 0 ? 4 : 2, cny: 0 }];
+      })),
+      searchBilling: { tool: 'web_search', ratePerThousand: 5, from: '2026-11-01' },
       peakNow: true,
       pricing: { source: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing', fetchedAt: '2026-09-19' },
       elapsedMs: 168,
@@ -239,7 +245,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.6', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.7', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },

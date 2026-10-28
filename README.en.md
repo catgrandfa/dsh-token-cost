@@ -51,7 +51,7 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (account quota / API key / third-party), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend**, hourly distribution, live session usage |
+| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (account quota / API key / third-party, plus a separately billed Search tool-call row), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend**, hourly distribution, live session usage |
 | **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals, cost composition, **daily history** |
 | **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 
@@ -62,6 +62,7 @@ More:
 - **Sidebar preview**: the entry shows `Token · ¥9.87` (expanded text and collapsed tooltip)
 - **Peak / off-peak pricing**: Beijing time Mon–Fri 09:00–12:00 and 14:00–18:00, computed per tier then summed
 - **Official cross-check**: optional DeepSeek account session or `platform.deepseek.com` web login
+- **Search tool-call fee**: a separate row in the channel split card, estimated from successful `web_search` calls (CNY 5 per 1,000 requests, billed from 2026-11-01; free before) and **not** added to token totals
 - **Balance**: DSH account or `DEEPSEEK_API_KEY`; the account path also exposes lifetime spend
 - **Edit settings in the panel**: click the budget / low-balance hint to write the value back
 - **Skins**: `default` (follows DSH theme) / `glass`
@@ -202,6 +203,7 @@ third-party usage per day (badge: "official + 3rd-party") while keeping provider
   the scan window defaults to 365 days and may backfill in stages (the footer shows scan progress)
 - Local estimates may differ from the official bill by a few cents
 - GLM / Kimi tiered pricing, discounts and subscription plans are not recoverable; third-party balance is not integrated
+- **Tool-call fees cover Search only**: estimated from local successful `web_search` calls (one call may issue several server-side searches, so this is a lower bound); `web_fetch` uses local HTTP by default and is not billed, and the DeepSeek Fetch API path is not included yet
 
 ---
 

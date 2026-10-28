@@ -42,6 +42,19 @@ export const THIRD_PARTY_PRICING = [
   },
 ];
 
+/**
+ * 工具调用（Search）单独计费：官方价 5 元 / 1,000 次成功请求（元/次）。
+ * 北京时间 2026-11-01 00:00 起开始计费，之前的调用免费 —— 官方公告原话：
+ * “Search 和 Fetch 按成功请求次数计费……目前未计费，将于 2026-11-01 00:00 起按次收取”。
+ *
+ * 本地日志只有 **工具调用** 记录，没有服务端实际请求数，所以这里按工具调用次数估算：
+ *   - web_search：DSH 走 Messages 服务端搜索，一次工具调用可能触发多次服务端搜索 → 本值是下界；
+ *   - web_fetch：DSH 默认走本地 HTTP 抓取，不经过 DeepSeek，不计费。
+ */
+export const SEARCH_CALL_PRICE = 5 / 1000;
+export const SEARCH_BILLING_FROM = '2026-11-01';
+export const SEARCH_TOOL_NAME = 'web_search';
+
 /** 固定单价（不区分峰谷）的费率三元组 */
 const flat = (cacheHit, cacheMiss, output, cacheWrite = 0) => ({
   cacheHit: { offPeak: cacheHit, peak: cacheHit },
@@ -335,6 +348,11 @@ function contributionOf(records, opts, f) {
   const days = new Map();
   // 非 DeepSeek 官方 provider 的按天贡献；宿主用它把「官方用量」与「第三方用量」合并展示
   const daysThirdParty = new Map();
+  // 工具调用（Search）按天：{ calls, cny }。官方按成功请求单独计费，
+  // 本地只能数到工具调用次数（没有服务端请求数），且 2026-11-01 之前免费。
+  const searchDays = new Map();
+  /** 尚未看到结果的 tool/call：callId → { name, time }，用结果判断成功/失败 */
+  const pendingTools = new Map();
   const models = new Map();
   // 按「日期 | provider | model」再分一层：面板/导出要按时间窗口看模型明细，
   // 只保留全局 models 的话选了 7 天也只能看到全历史。这一层复用同一个 bucket，聚合逻辑不变。
@@ -364,6 +382,29 @@ function contributionOf(records, opts, f) {
     }
     if (rec.type === 'session/title' && rec.data?.title) {
       bucket.title = rec.data.title;
+      continue;
+    }
+    // 工具调用先挂起，等 tool/result 判断是否成功（官方按「成功请求」计费）
+    if (rec.type === 'tool/call') {
+      if (rec.data?.callId) {
+        pendingTools.set(rec.data.callId, { name: rec.data.name, time: rec.time ?? Date.now() });
+      }
+      continue;
+    }
+    if (rec.type === 'tool/result') {
+      const callId = rec.data?.message?.toolCallId ?? rec.data?.toolCallId;
+      const pending = callId ? pendingTools.get(callId) : null;
+      if (pending) {
+        pendingTools.delete(callId);
+        const failed = Boolean(rec.data?.message?.isError ?? rec.data?.isError);
+        if (!failed && pending.name === SEARCH_TOOL_NAME) {
+          const dk = dayKeyOf(pending.time ?? rec.time ?? Date.now());
+          const cur = searchDays.get(dk) ?? { calls: 0, cny: 0 };
+          cur.calls += 1;
+          if (dk >= SEARCH_BILLING_FROM) cur.cny += SEARCH_CALL_PRICE;
+          searchDays.set(dk, cur);
+        }
+      }
       continue;
     }
     const got = usageOf(rec);
@@ -402,7 +443,7 @@ function contributionOf(records, opts, f) {
     providers.set(provider, pt);
   }
   bucket.isSubagent = bucket.delegationDepth > 0;
-  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, daysThirdParty, models, dayModels, providers, calls, unpriced };
+  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, daysThirdParty, searchDays, models, dayModels, providers, calls, unpriced };
 }
 
 /**
@@ -488,6 +529,8 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
 
   const days = new Map();
   const daysThirdParty = new Map();
+  // 工具调用（Search）按天：{ calls, cny }，与 token 金额分开统计
+  const searchDays = new Map();
   const sessions = new Map();
   const models = new Map();
   const dayModels = new Map();
@@ -507,6 +550,12 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     for (const [k, v] of c.daysThirdParty ?? []) {
       if (!daysThirdParty.has(k)) daysThirdParty.set(k, blankBucket());
       mergeBucket(daysThirdParty.get(k), v);
+    }
+    for (const [k, v] of c.searchDays ?? []) {
+      const cur = searchDays.get(k) ?? { calls: 0, cny: 0 };
+      cur.calls += v.calls ?? 0;
+      cur.cny += v.cny ?? 0;
+      searchDays.set(k, cur);
     }
     for (const [k, v] of c.models) {
       if (!models.has(k)) models.set(k, blankBucket());
@@ -572,6 +621,12 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     days: Object.fromEntries([...days.entries()].map(([k, v]) => [k, packBucket(v)])),
     // 非 DeepSeek 官方 provider 的按天贡献（宿主与官方用量合并时用）
     daysThirdParty: Object.fromEntries([...daysThirdParty.entries()].map(([k, v]) => [k, packBucket(v)])),
+    // 工具调用（Search）单独计费：按北京日期 { calls, cny }，不并入 token 金额
+    daysSearch: Object.fromEntries([...searchDays.entries()].map(([k, v]) => [k, {
+      calls: v.calls,
+      cny: Number(v.cny.toFixed(6)),
+    }])),
+    searchBilling: { tool: SEARCH_TOOL_NAME, ratePerThousand: 5, from: SEARCH_BILLING_FROM },
     sessions: Object.fromEntries([...sessions.entries()].map(([k, v]) => {
       const p = packBucket(v);
       return [k, {

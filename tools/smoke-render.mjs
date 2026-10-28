@@ -35,6 +35,11 @@ const READY = {
   daysThirdParty: {
     '2026-10-15': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4, byHour: new Array(24).fill(0) },
   },
+  // 工具调用（Search）单独计费：11/1 前免费，只记成功调用次数
+  daysSearch: {
+    '2026-10-15': { calls: 3, cny: 0 },
+    '2026-10-14': { calls: 5, cny: 0.025 },
+  },
   providers: {
     'deepseek-official': { calls: 120, tokens: 26.16e6, cny: 1.15 },
     'deepseek-account': { calls: 67, tokens: 15.18e6, cny: 0.86 },
@@ -158,6 +163,11 @@ try {
             console.error(`FAIL: 渠道拆分没有把官方渠道按「账号额度 / API Key」拆开（缺 ${key}）`);
             process.exit(1);
           }
+        }
+        // 工具调用（Search）单独计费的一行也必须在（去掉这行或并进 token 金额时这里会变红）
+        if (!seenText.has('toolSearchRow')) {
+          console.error('FAIL: 渠道拆分缺少「工具调用 Search」单独计费的一行');
+          process.exit(1);
         }
       }
     }
