@@ -431,15 +431,15 @@ function Stat({ label, value, unit, color, extra, t, surface }) {
   }, [
     React.createElement('div', {
       key: 'k',
-      style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.label3, whiteSpace: 'nowrap' },
+      style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.label3, whiteSpace: 'nowrap' },
     }, [color ? React.createElement('span', { key: 's', style: swatch(color) }) : null, label]),
     React.createElement('div', {
       key: 'v',
-      style: { fontSize: 19, fontWeight: 700, marginTop: 3, color: C.label, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis' },
+      style: { fontSize: 20, fontWeight: 700, marginTop: 3, color: C.label, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis' },
     }, [
       value,
-      unit ? React.createElement('span', { key: 'u', style: { fontSize: 12, fontWeight: 600, color: C.label3, marginLeft: 1 } }, unit) : null,
-      extra ? React.createElement('span', { key: 'e', style: { fontSize: 12, fontWeight: 500, color: C.label3 } }, extra) : null,
+      unit ? React.createElement('span', { key: 'u', style: { fontSize: 13, fontWeight: 600, color: C.label3, marginLeft: 1 } }, unit) : null,
+      extra ? React.createElement('span', { key: 'e', style: { fontSize: 13, fontWeight: 500, color: C.label3 } }, extra) : null,
     ]),
   ]);
 }
@@ -453,10 +453,10 @@ function MiniStat({ label, value, hint }) {
       background: 'var(--dsw-alias-bg-layer-1, rgba(128,128,128,.05))',
     },
   }, [
-    React.createElement('div', { key: 't', style: { fontSize: 11, color: C.label3 } }, label),
+    React.createElement('div', { key: 't', style: { fontSize: 12, color: C.label3 } }, label),
     React.createElement('div', {
       key: 'v',
-      style: { fontSize: 15, fontWeight: 650, fontVariantNumeric: 'tabular-nums', marginTop: 1 },
+      style: { fontSize: 16, fontWeight: 650, fontVariantNumeric: 'tabular-nums', marginTop: 1 },
     }, value),
   ]);
 }
@@ -778,7 +778,8 @@ function Chip({ active, onClick, children, title }) {
     title,
     onClick,
     style: {
-      fontSize: 11, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', userSelect: 'none',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1.15,
+      fontSize: 12, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', userSelect: 'none',
       border: `1px solid ${active ? 'var(--dsw-alias-brand-primary-foreground, ' + C.brand + ')' : C.border}`,
       background: active ? 'var(--dsw-alias-interactive-bg-hover, rgba(47,125,255,.12))' : 'transparent',
       color: active ? C.label : C.label3,
@@ -788,9 +789,9 @@ function Chip({ active, onClick, children, title }) {
 
 function SectionTitle({ children, right }) {
   return h('div', {
-    style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: C.label3 },
+    style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: C.label3 },
   }, [
-    h('span', { key: 't', style: { fontSize: 12.5, fontWeight: 650, color: C.label2 } }, children),
+    h('span', { key: 't', style: { fontSize: 13.5, fontWeight: 650, color: C.label2 } }, children),
     h('span', { key: 'sp', style: { flex: 1 } }),
     right ?? null,
   ]);
@@ -895,8 +896,8 @@ function TokenMeterPanel(props) {
     const skLine = (key, width, height = 8, extra = {}) => h('div', {
       key, style: { width, height, borderRadius: 4, background: C.border1, opacity: 0.5, ...extra },
     });
-    const skCard = (key, surface, minHeight, children) => h('div', {
-      key, style: { ...surface, marginTop: 0, minHeight, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box' },
+    const skCard = (key, surface, minHeight, children, extra = {}) => h('div', {
+      key, style: { ...surface, marginTop: 0, minHeight, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box', ...extra },
     }, children);
     const spinner = h('span', {
       key: 'sp',
@@ -906,10 +907,10 @@ function TokenMeterPanel(props) {
       },
     });
     return h('div', { key: 'skeleton', style: { opacity: 0.85 } }, [
-      h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', { key: 'grid', className: 'dsh-tm-cols', style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' } }, [
-        h('div', { key: 'left', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-          skCard('spend', SKINS.default.panel, 290, [
-            h('div', { key: 'l', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.label3 } }, [
+      h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', { key: 'grid', className: 'dsh-tm-cols', style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'stretch' } }, [
+        h('div', { key: 'left', style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 } }, [
+          skCard('spend', SKINS.default.panel, 320, [
+            h('div', { key: 'l', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.label3 } }, [
               spinner, h('span', { key: 't' }, `${t('firstLoad')} ${waitSec}s`),
             ]),
             skLine('a', '42%', 10),
@@ -917,41 +918,41 @@ function TokenMeterPanel(props) {
             skLine('c', '86%', 10),
             skLine('d', '58%', 10),
           ]),
-          skCard('trend', SKINS.default.card, 360, [
+          skCard('trend', SKINS.default.card, 400, [
             skLine('h', '32%', 9),
             h('div', { key: 'chart', style: { height: 116, borderRadius: 8, background: C.border1, opacity: 0.3 } }),
             skLine('x', '100%', 8),
             h('div', { key: 'hourly', style: { height: 54, borderRadius: 8, background: C.border1, opacity: 0.3, marginTop: 10 } }),
           ]),
-          skCard('budget', SKINS.default.panel, 280, [
+          skCard('budget', SKINS.default.panel, 305, [
             skLine('h', '28%', 9), skLine('a', '100%', 8), skLine('b', '66%', 8),
             h('div', { key: 'sep', style: { height: 1, background: C.border1, margin: '6px 0' } }),
             skLine('c', '100%', 8), skLine('d', '52%', 8),
-          ]),
+          ], { flexGrow: 1 }),
         ]),
-        h('div', { key: 'right', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-          skCard('channels', SKINS.default.card, 250, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12)]),
-          skCard('stats', SKINS.default.panel, 335, [
+        h('div', { key: 'right', style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 } }, [
+          skCard('channels', SKINS.default.card, 255, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12)]),
+          skCard('stats', SKINS.default.panel, 370, [
             skLine('h', '36%', 9),
             h('div', { key: 'g', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
               [0, 1, 2, 3].map((i) => h('div', { key: i, style: { height: 54, borderRadius: 10, background: C.border1, opacity: 0.42 } }))),
             skLine('l', '100%', 8),
           ]),
-          skCard('rates', SKINS.default.panel, 365, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12), skLine('d', '100%', 12), skLine('e', '64%', 9)]),
+          skCard('rates', SKINS.default.panel, 405, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12), skLine('d', '100%', 12), skLine('e', '64%', 9)], { flexGrow: 1 }),
         ]),
       ])),
-      h('div', { key: 'hint', style: { marginTop: 8, fontSize: 10.5, color: C.label3 } }, t('firstLoadHint')),
+      h('div', { key: 'hint', style: { marginTop: 8, fontSize: 11.5, color: C.label3 } }, t('firstLoadHint')),
     ]);
   }
   if (status === 'failed' && !data) {
-    return h('div', { style: { padding: 28, color: C.error, fontSize: 13 } }, [
+    return h('div', { style: { padding: 28, color: C.error, fontSize: 14 } }, [
       h('div', { key: 'a' }, `${t('failed')}：${error}`),
       h('button', {
         key: 'b',
         onClick: refresh,
         style: {
           marginTop: 10, padding: '5px 12px', borderRadius: 8, cursor: 'pointer',
-          border: `1px solid ${C.border}`, background: 'transparent', color: C.label2, fontSize: 12,
+          border: `1px solid ${C.border}`, background: 'transparent', color: C.label2, fontSize: 13,
         },
       }, t('retry')),
     ]);
@@ -1267,7 +1268,7 @@ function TokenMeterPanel(props) {
     key: label + index,
     style: {
       textAlign: aligns[index] ?? (index === 0 ? 'left' : 'right'),
-      fontWeight: 600, fontSize: 11, color: C.label3, padding: '6px 8px',
+      fontWeight: 600, fontSize: 12, color: C.label3, padding: '6px 8px',
       borderBottom: `1px solid ${C.border1}`, whiteSpace: 'nowrap',
     },
   }, label))));
@@ -1275,8 +1276,9 @@ function TokenMeterPanel(props) {
     key,
     onClick: () => setView(key),
     style: {
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1.2,
       padding: '6px 14px', borderRadius: 999, cursor: 'pointer', userSelect: 'none',
-      fontSize: 12.5, fontWeight: view === key ? 700 : 500,
+      fontSize: 13.5, fontWeight: view === key ? 700 : 500,
       color: view === key ? C.label : C.label3,
       background: view === key ? 'var(--dsw-alias-interactive-bg-hover, rgba(47,125,255,.12))' : 'transparent',
       border: `1px solid ${view === key ? C.brand : 'transparent'}`,
@@ -1285,7 +1287,8 @@ function TokenMeterPanel(props) {
   const dataSourceBadge = h('span', {
     key: 'src',
     style: {
-      fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+      display: 'inline-flex', alignItems: 'center', lineHeight: 1.2,
+      fontSize: 11.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
       border: `1px solid ${C.border}`, color: officialOk ? C.brand : C.label3, verticalAlign: 'middle',
     },
   }, meterOfficial ? t('officialLabel') : meterMixed ? t('mixedShort') : t('localShort'));
@@ -1295,22 +1298,22 @@ function TokenMeterPanel(props) {
     h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', {
       key: 'grid',
       className: 'dsh-tm-cols',
-      style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' },
+      style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'stretch' },
     }, [
-      h('div', { key: 'left', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 290 } }, [
-        h('div', { key: 'l', style: { fontSize: 12, color: C.label2 } }, `${t('today')} · ${today}`),
+      h('div', { key: 'left', style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 } }, [
+h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 320 } }, [
+        h('div', { key: 'l', style: { fontSize: 13, color: C.label2 } }, `${t('today')} · ${today}`),
         h('div', {
           key: 'n',
-          style: { fontSize: 34, fontWeight: 750, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
+          style: { fontSize: 36, fontWeight: 750, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
         }, [
-          h('span', { key: 'c', style: { fontSize: 16, fontWeight: 600, color: C.label2 } }, '¥'),
+          h('span', { key: 'c', style: { fontSize: 17, fontWeight: 600, color: C.label2 } }, '¥'),
           shown.toFixed(2),
           dataSourceBadge,
           shownDelta !== null ? h('span', {
             key: 'd',
             style: {
-              fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+              fontSize: 12, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
               color: shownDelta >= 0 ? C.error : C.ok,
               background: 'var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.12))',
             },
@@ -1318,7 +1321,7 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
         ]),
         h('div', {
           key: 'meta',
-          style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' },
+          style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.label3, fontVariantNumeric: 'tabular-nums' },
         }, [
           h('span', { key: 'mt' }, `${t('updated')} ${clock(at || data.generatedAt)}`),
           h('div', {
@@ -1326,43 +1329,43 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
             onClick: refresh,
             title: t('refresh'),
             style: {
-              display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, lineHeight: 1.2, fontSize: 12, fontWeight: 600,
               padding: '2px 9px', borderRadius: 999, cursor: 'pointer', userSelect: 'none',
               border: `1px solid ${C.brand}`, color: C.brand,
               background: 'var(--dsw-alias-interactive-bg-hover, rgba(47,125,255,.10))',
               opacity: status === 'loading' ? 0.55 : 1,
             },
-          }, [h('span', { key: 'i', style: { fontSize: 12, lineHeight: 1 } }, '⟳'), t('refresh')]),
+          }, [h('span', { key: 'i', style: { fontSize: 13, lineHeight: 1 } }, '⟳'), t('refresh')]),
         ]),
         h('div', {
           key: 'money',
           style: { marginTop: 4, paddingTop: 8, borderTop: `1px solid ${C.border1}`, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '7px 12px' },
         }, [
           ...windows.map((m) => h('div', { key: m.key, style: { minWidth: 0 } }, [
-            h('div', { key: 'l', style: { fontSize: 10.5, color: C.label3, whiteSpace: 'nowrap' } }, m.label),
+            h('div', { key: 'l', style: { fontSize: 11.5, color: C.label3, whiteSpace: 'nowrap' } }, m.label),
             h('div', {
               key: 'v',
-              style: { fontSize: 15, fontWeight: 650, color: C.label2, fontVariantNumeric: 'tabular-nums' },
+              style: { fontSize: 16, fontWeight: 650, color: C.label2, fontVariantNumeric: 'tabular-nums' },
             }, `¥${fmtMoney(m.value)}`),
           ])),
           h('div', {
             key: 'wnote',
-            style: { gridColumn: '1 / -1', fontSize: 10, color: C.label3, lineHeight: 1.6 },
+            style: { gridColumn: '1 / -1', fontSize: 11, color: C.label3, lineHeight: 1.6 },
           }, t('wideSourceNote')),
         ]),
         balCost ? h('div', {
           key: 'total',
-          style: { fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' },
+          style: { fontSize: 12, color: C.label3, fontVariantNumeric: 'tabular-nums' },
         }, `${t('totalSpent')} ¥${fmtMoney(balCost)}`) : null,
       ]),
-      h('div', { key: 'trend', style: { ...S.card, marginTop: 0, minHeight: 360 } }, [
-      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6 } }, [
+      h('div', { key: 'trend', style: { ...S.card, marginTop: 0, minHeight: 400 } }, [
+      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } }, [
         h(Chip, { key: 'r7', active: range === 7, onClick: () => setRange(7) }, t('range7')),
         h(Chip, { key: 'r30', active: range === 30, onClick: () => setRange(30) }, t('range30')),
-        h('span', { key: 'hist', onClick: () => setView('detail'), style: { fontSize: 10.5, color: C.brand, cursor: 'pointer', userSelect: 'none', padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.brand}`, whiteSpace: 'nowrap' } }, t('historyLink')),
+        h('span', { key: 'hist', onClick: () => setView('detail'), style: { display: 'inline-flex', alignItems: 'center', lineHeight: 1.2, fontSize: 11.5, color: C.brand, cursor: 'pointer', userSelect: 'none', padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.brand}`, whiteSpace: 'nowrap' } }, t('historyLink')),
         dataDays < 3 ? h('span', {
           key: 'few',
-          style: { fontSize: 10.5, color: C.label3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' },
+          style: { fontSize: 11.5, color: C.label3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' },
         }, t('fewDays')) : null,
       ]) }, t('trend')),
       (() => {
@@ -1417,7 +1420,7 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
         key: 'x',
         style: {
           display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 4,
-          borderTop: `1px solid ${C.border1}`, fontSize: 10, color: C.label3, fontVariantNumeric: 'tabular-nums',
+          borderTop: `1px solid ${C.border1}`, fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums',
         },
       }, [
         h('span', { key: 'a' }, trend_[0]?.key?.slice(5) ?? ''),
@@ -1425,7 +1428,7 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
         h('span', { key: 'c', style: { color: C.brand, fontWeight: 700 } }, t('today')),
       ]),
       h('div', { key: 'hr', style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border1}` } }, [
-        h('div', { key: 'hh', style: { display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.label3, gap: 8 } }, [
+        h('div', { key: 'hh', style: { display: 'flex', alignItems: 'center', fontSize: 12.5, color: C.label3, gap: 8 } }, [
           h('span', { key: 't', style: { fontWeight: 650, color: C.label2 } }, t('byHour')),
           h('span', { key: 'sp', style: { flex: 1 } }),
           h('span', { key: 'p' }, `${String(peakHour).padStart(2, '0')}:00 · ${t('peakHourLabel')} ${fmt(maxHour)} tokens`),
@@ -1443,16 +1446,16 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
             },
           })),
         ]),
-        h('div', { key: 'ax', style: { display: 'flex', gap: 2, fontSize: 9, color: C.label3, marginTop: 4 } },
+        h('div', { key: 'ax', style: { display: 'flex', gap: 2, fontSize: 10, color: C.label3, marginTop: 4 } },
           Array.from({ length: 24 }, (_, hour) => h('span', {
             key: hour, style: { flex: 1, minWidth: 0, textAlign: 'center', fontVariantNumeric: 'tabular-nums' },
           }, String(hour).padStart(2, '0')))),
       ]),
       ]),
-h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 280 } }, [
-        h('div', { key: 'h', style: { fontSize: 12, fontWeight: 650, color: C.label2 } }, t('budgetCard')),
+h('div', { key: 'budget', style: { ...S.panel, fontSize: 12.5, color: C.label2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 305, flexGrow: 1 } }, [
+        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('budgetCard')),
         h('div', { key: 'b1' }, [
-          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, marginBottom: 5 } }, [
+          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 12, marginBottom: 5 } }, [
             budget > 0 ? h('span', {
               key: 'n', title: t('editBudgetHint'),
               onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: String(budget) }),
@@ -1480,22 +1483,22 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
             key: 'p',
             title: t('budgetOffHint'),
             onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: '50' }),
-            style: { fontSize: 10.5, color: C.label3, cursor: 'pointer', lineHeight: 1.6 },
+            style: { fontSize: 11.5, color: C.label3, cursor: 'pointer', lineHeight: 1.6 },
           }, t('budgetOffHint')),
           h('div', {
             key: 'proj',
-            style: { display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, fontSize: 11, color: C.label3 },
+            style: { display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, fontSize: 12, color: C.label3 },
           }, [
             h('span', { key: 'l' }, `${t('projection')} `),
             h('span', {
               key: 'v',
               style: { fontWeight: 650, color: projection !== null && budget > 0 && projection > budget ? C.error : C.label2, fontVariantNumeric: 'tabular-nums' },
             }, projection === null ? '—' : money(projection)),
-            h('span', { key: 'h', title: t('projectionHint'), style: { fontSize: 10.5 } }, 'ⓘ'),
+            h('span', { key: 'h', title: t('projectionHint'), style: { fontSize: 11.5 } }, 'ⓘ'),
           ]),
         ]),
         h('div', { key: 'b2', style: { borderTop: `1px solid ${C.border1}`, paddingTop: 7 } }, [
-          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, marginBottom: 5 } }, [
+          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 12, marginBottom: 5 } }, [
             h('span', {
               key: 'n', title: t('budgetOffHint'),
               onClick: () => setEdit({ field: 'monthlyBudget', label: t('monthBudget'), value: String(monthBudget) }),
@@ -1509,25 +1512,25 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
           }) : null,
         ]),
         h('div', { key: 'bal', style: { borderTop: `1px solid ${C.border1}`, paddingTop: 7, cursor: 'pointer' }, onClick: () => { balance.reload(); refresh(); } }, [
-          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11, color: C.label3 } }, [
+          h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12, color: C.label3 } }, [
             h('span', { key: 'n' }, t('balance')),
-            h('span', { key: 'r', style: { marginLeft: 'auto', fontSize: 12 } }, '⟳'),
+            h('span', { key: 'r', style: { marginLeft: 'auto', fontSize: 13 } }, '⟳'),
           ]),
           h('div', { key: 'v', style: { display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 1 } }, [
             balInfo ? h('span', {
               key: 'n',
               style: {
-                fontSize: 23, fontWeight: 750, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
+                fontSize: 24, fontWeight: 750, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
                 color: balLow ? C.error : undefined, opacity: balLow ? 0.88 : undefined,
               },
-            }, [h('span', { key: 'c', style: { fontSize: 13, fontWeight: 600, color: C.label2, marginRight: 1 } }, balCur), fmtMoney(balInfo.total_balance)])
+            }, [h('span', { key: 'c', style: { fontSize: 14, fontWeight: 600, color: C.label2, marginRight: 1 } }, balCur), fmtMoney(balInfo.total_balance)])
               : h('span', {
                 key: 'e',
-                style: { fontSize: 12.5, fontWeight: 600, color: balData && balData.ok === false ? C.warn : C.label3 },
+                style: { fontSize: 13.5, fontWeight: 600, color: balData && balData.ok === false ? C.warn : C.label3 },
               }, balText),
-            balGranted ? h('span', { key: 'g', style: { fontSize: 10.5, color: C.label3 } }, `${t('inclGranted')} ${balCur}${fmtMoney(balGranted)}`) : null,
+            balGranted ? h('span', { key: 'g', style: { fontSize: 11.5, color: C.label3 } }, `${t('inclGranted')} ${balCur}${fmtMoney(balGranted)}`) : null,
             balSource ? h('span', {
-              key: 's', style: { fontSize: 10, color: C.label3, padding: '1px 6px', borderRadius: 999, border: `1px solid ${C.border}` },
+              key: 's', style: { fontSize: 11, color: C.label3, padding: '1px 6px', borderRadius: 999, border: `1px solid ${C.border}` },
             }, balSource) : null,
           ]),
         ]),
@@ -1535,11 +1538,11 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
           key: 'lowbal',
           onClick: () => setEdit({ field: 'lowBalanceAlert', label: t('lowBalance'), value: String(lowAlert) }),
           title: t('lowBalanceHint'),
-          style: { fontSize: 11, cursor: 'pointer', color: C.error, opacity: 0.9 },
+          style: { fontSize: 12, cursor: 'pointer', color: C.error, opacity: 0.9 },
         }, `⚠ ${t('lowBalance')} ¥${fmtMoney(lowAlert)} · ${t('editLowHint')} ✎`) : null,
         edit ? h('div', {
           key: 'edit',
-          style: { display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, borderTop: `1px solid ${C.border1}`, fontSize: 11.5 },
+          style: { display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, borderTop: `1px solid ${C.border1}`, fontSize: 12.5 },
         }, [
           h('span', { key: 'l', style: { color: C.label3 } }, `${edit.label} =`),
           h('input', {
@@ -1550,7 +1553,7 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
               if (e.key === 'Escape') setEdit(null);
             },
             style: {
-              width: 76, padding: '2px 6px', fontSize: 12, fontVariantNumeric: 'tabular-nums',
+              width: 76, padding: '2px 6px', fontSize: 13, fontVariantNumeric: 'tabular-nums',
               borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.label,
             },
           }),
@@ -1558,7 +1561,7 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
           h('span', { key: 'c', onClick: () => setEdit(null), style: { cursor: 'pointer', color: C.label3 } }, t('cancel')),
           edit.error ? h('span', { key: 'e', style: { color: C.error } }, edit.error) : null,
         ]) : null,
-        h('div', { key: 'src', style: { fontSize: 10.5, color: C.label3, lineHeight: 1.7, borderTop: `1px solid ${C.border1}`, paddingTop: 6 } }, [
+        h('div', { key: 'src', style: { fontSize: 11.5, color: C.label3, lineHeight: 1.7, borderTop: `1px solid ${C.border1}`, paddingTop: 6 } }, [
           h('div', { key: 'rate' }, `${t('rateLine')}：${data.peakNow ? t('peak') : t('offpeak')}`),
           officialOk ? h('div', { key: 'ok', style: { color: C.label3 } }, `${t('officialLabel')} ✓ ${official.days ? Object.keys(official.days).length : 0} 天`)
             : h('div', { key: 'off' }, `${t('officialLabel')}：${official?.reason === 'loading' ? t('officialLoading') : official?.reason === 'disabled' ? t('officialOff') : official?.reason === 'no-credential' ? t('notConnectedChrome') : official?.reason === 'no-browser' ? t('noBrowser') : (official?.error ?? t('balanceFailed'))}`),
@@ -1569,26 +1572,26 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, 
         ]),
       ]),
       ]),
-      h('div', { key: 'right', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-      h('div', { key: 'channels', style: { ...S.card, marginTop: 0, minHeight: 250 } }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
-      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
+      h('div', { key: 'right', style: { display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 } }, [
+      h('div', { key: 'channels', style: { ...S.card, marginTop: 0, minHeight: 255 } }, [
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
+      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13.5 } }, [
         tableHead([t('channelCol'), t('channelToday'), t('channel30d')]),
         h('tbody', { key: 'tb' }, channelStats.map((row) => h('tr', { key: row.key }, [
           h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
             row.official
-              ? h('span', { key: 'tag', style: { fontSize: 10, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
+              ? h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
               : (row.provider || t('thirdChannel')),
             !row.official && row.provider && channelRateKeys.includes(row.provider)
-              ? h('span', { key: 'r', style: { fontSize: 10, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+              ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
           ]),
           h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
           h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
         ]))),
       ])),
-      h('div', { key: 'note', style: { fontSize: 10.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
+      h('div', { key: 'note', style: { fontSize: 11.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
       ]),
-h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start', minHeight: 335 } }, [
+h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start', minHeight: 370 } }, [
         h(Stat, { key: '1', t, surface: S.stat, label: t('hitInput'), color: C.hit, value: fmt(D.hit) }),
         h(Stat, { key: '2', t, surface: S.stat, label: t('hitRate'), value: D.hitRate === null || D.hitRate === undefined ? '—' : `${D.hitRate}`, unit: '%' }),
         h(Stat, { key: '3', t, surface: S.stat, label: t('missInput'), color: C.miss, value: fmt(D.miss) }),
@@ -1601,7 +1604,7 @@ h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColum
           h(MiniStat, { key: 'c', label: t('callsShort'), value: `${D.calls}` }),
           h(MiniStat, { key: 'pc', label: t('perCall'), hint: t('perCallHint'), value: D.calls > 0 ? `¥${(D.cny / D.calls).toFixed(4)}` : '—' }),
         ]),
-        h('div', { key: 'compose', style: { gridColumn: '1 / -1', borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2, fontSize: 11 } }, (() => {
+        h('div', { key: 'compose', style: { gridColumn: '1 / -1', borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2, fontSize: 12 } }, (() => {
           const total = D.hit + D.miss + D.out;
           const seg = (n, color) => (total > 0 ? h('i', { key: color, style: { flexGrow: Math.max(n, total / 2000), background: color } }) : null);
           return [
@@ -1610,7 +1613,7 @@ h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColum
               h('span', { key: 'v', style: { marginLeft: 'auto', color: C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' } }, fmt(total)),
             ]),
             h('div', { key: 'bar', style: { display: 'flex', height: 9, borderRadius: 99, overflow: 'hidden', marginTop: 7, background: C.border1 } }, [seg(D.hit, C.hit), seg(D.miss, C.miss), seg(D.out, C.out)]),
-            h('div', { key: 'lg', style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 10.5, color: C.label3, marginTop: 5 } }, [
+            h('div', { key: 'lg', style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: C.label3, marginTop: 5 } }, [
               h(LegendDot, { key: 'h', color: C.hit, text: `${t('hitInput')} ${fmt(D.hit)}${total > 0 ? ` · ${((100 * D.hit) / total).toFixed(1)}%` : ''}` }),
               h(LegendDot, { key: 'm', color: C.miss, text: `${t('missInput')} ${fmt(D.miss)}${total > 0 ? ` · ${((100 * D.miss) / total).toFixed(1)}%` : ''}` }),
               h(LegendDot, { key: 'o', color: C.out, text: `${t('output')} ${fmt(D.out)}${total > 0 ? ` · ${((100 * D.out) / total).toFixed(1)}%` : ''}` }),
@@ -1618,13 +1621,13 @@ h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColum
           ];
         })()),
       ]),
-h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lineHeight: 1.7, minHeight: 365 } }, [
-        h('div', { key: 'h', style: { fontSize: 12, fontWeight: 650, color: C.label2 } }, t('tierTitle')),
+h('div', { key: 'rates', style: { ...S.panel, fontSize: 12, color: C.label3, lineHeight: 1.7, minHeight: 405, flexGrow: 1 } }, [
+        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('tierTitle')),
         h('div', { key: 'tier', style: { marginTop: 4 } }, [
           h('span', { key: 'l', style: { color: C.label2, fontWeight: 600 } }, `${t('currentTier')}：`),
           h('span', { key: 'v', style: { color: data.peakNow ? C.warn : C.label2 } }, data.peakNow ? t('peak') : t('offpeak')),
         ]),
-        h('div', { key: 'w', style: { fontSize: 10.5, lineHeight: 1.6 } }, t('peakWindow')),
+        h('div', { key: 'w', style: { fontSize: 11.5, lineHeight: 1.6 } }, t('peakWindow')),
         (() => {
           const rows = [
             { k: 'hit', label: t('hitInput'), now: unit.hit, tokens: D.hit },
@@ -1633,12 +1636,12 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
           ];
           const line = { borderTop: `1px solid ${C.border1}` };
           const td = (key, value, style) => h('td', { key, style }, value);
-          return h('table', { key: 'merge', style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 9 } }, [
+          return h('table', { key: 'merge', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 9 } }, [
             h('thead', { key: 'th' }, h('tr', null, [
-              h('th', { key: 'i', style: { textAlign: 'left', fontSize: 10.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colItem')),
-              h('th', { key: 'p', style: { textAlign: 'right', fontSize: 10.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colPrice')),
-              h('th', { key: 'u', style: { textAlign: 'right', fontSize: 10.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colUsage')),
-              h('th', { key: 's', style: { textAlign: 'right', fontSize: 10.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colSubtotal')),
+              h('th', { key: 'i', style: { textAlign: 'left', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colItem')),
+              h('th', { key: 'p', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colPrice')),
+              h('th', { key: 'u', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colUsage')),
+              h('th', { key: 's', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colSubtotal')),
             ])),
             h('tbody', { key: 'tb' }, [
               ...rows.map((r) => h('tr', { key: r.k }, [
@@ -1654,15 +1657,15 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
             ]),
           ]);
         })(),
-        D.tier ? h('div', { key: 'tiernote', style: { fontSize: 10.5, color: C.label3, marginTop: 6 } },
+        D.tier ? h('div', { key: 'tiernote', style: { fontSize: 11.5, color: C.label3, marginTop: 6 } },
           `${t('byLocalTier')}：${t('tierOffShort')} ${money(D.tier.offPeak?.cny ?? 0)} · ${t('tierPeakShort')} ${money(D.tier.peak?.cny ?? 0)}`) : null,
-        h('div', { key: 'note', style: { fontSize: 10.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
-        hasThirdParty ? h('div', { key: 'third', style: { fontSize: 10.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
+        h('div', { key: 'note', style: { fontSize: 11.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
+        hasThirdParty ? h('div', { key: 'third', style: { fontSize: 11.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
       ]),
       ]),
     ])),
     live ? h('div', { key: 'live', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, t('liveHint')) }, t('live')),
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, t('liveHint')) }, t('live')),
       h('div', {
         key: 'g',
         style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10, marginTop: 10 },
@@ -1677,8 +1680,8 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
   /* ---------------- 明细 ---------------- */
   const detail = h('div', { key: 'detail' }, [
     h('div', { key: 'head', style: { ...S.card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } }, [
-      h('div', { key: 't', style: { fontSize: 12.5, fontWeight: 650, color: C.label2 } }, t('detailTitle')),
-      h('div', { key: 'chips', style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, [
+      h('div', { key: 't', style: { fontSize: 13.5, fontWeight: 650, color: C.label2 } }, t('detailTitle')),
+      h('div', { key: 'chips', style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } }, [
         h(Chip, { key: 'today', active: detailRange === 'today', onClick: () => setDetailRange('today') }, t('rangeToday')),
         h(Chip, { key: '7d', active: detailRange === '7d', onClick: () => setDetailRange('7d') }, t('range7d')),
         h(Chip, { key: '30d', active: detailRange === '30d', onClick: () => setDetailRange('30d') }, t('range30d')),
@@ -1687,16 +1690,16 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
         h(Chip, { key: 'year', active: detailRange === 'year', onClick: () => setDetailRange('year') }, t('rangeYear')),
       ]),
       h('span', { key: 'sp', style: { flex: 1 } }),
-      h('span', { key: 'tot', style: { fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' } },
+      h('span', { key: 'tot', style: { fontSize: 12, color: C.label3, fontVariantNumeric: 'tabular-nums' } },
         `${t('detailTotals')} ¥${fmtMoney(detailTotals.cny)} · ${detailTotals.calls} ${t('calls')}`),
     ]),
 
     // 按模型
     h('div', { key: 'models', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${modelRows.length} ${t('modelsUnit')}`) }, t('modelBreakdown')),
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${modelRows.length} ${t('modelsUnit')}`) }, t('modelBreakdown')),
       modelRows.length === 0
-        ? h('div', { key: 'e', style: { fontSize: 12, color: C.label3, padding: '12px 0' } }, t('noDataWindow'))
-        : h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
+        ? h('div', { key: 'e', style: { fontSize: 13, color: C.label3, padding: '12px 0' } }, t('noDataWindow'))
+        : h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13.5 } }, [
           tableHead([t('modelCol'), t('callsShort'), t('tokensCol'), t('cost'), t('shareCol')]),
           h('tbody', { key: 'tb' }, modelRows.map((row) => h('tr', { key: row.key }, [
             h('td', { key: 'm', style: cell({ color: C.label2, whiteSpace: 'nowrap' }), title: row.key }, row.key),
@@ -1720,15 +1723,15 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
           onChange: (e) => setSessionQuery(e.target.value),
           placeholder: t('searchSessions'),
           style: {
-            width: 200, padding: '3px 8px', fontSize: 11.5, borderRadius: 8,
+            width: 200, padding: '3px 8px', fontSize: 12.5, borderRadius: 8,
             border: `1px solid ${C.border}`, background: 'transparent', color: C.label, fontFamily: 'inherit',
           },
         }),
-        h('span', { key: 'n', style: { fontSize: 10.5 } }, `${filteredSessions.length} ${t('sessionsUnit')}`),
+        h('span', { key: 'n', style: { fontSize: 11.5 } }, `${filteredSessions.length} ${t('sessionsUnit')}`),
       ]) }, t('sessionsBreakdown')),
       filteredSessions.length === 0
-        ? h('div', { key: 'e', style: { fontSize: 12, color: C.label3, padding: '12px 0' } }, sessionQuery ? t('noMatch') : t('noDataWindow'))
-        : h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
+        ? h('div', { key: 'e', style: { fontSize: 13, color: C.label3, padding: '12px 0' } }, sessionQuery ? t('noMatch') : t('noDataWindow'))
+        : h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13.5 } }, [
           tableHead([t('session'), t('lastCall'), t('tokensCol'), t('callsShort'), t('cost'), t('shareCol')]),
           h('tbody', { key: 'tb' }, filteredSessions.slice(0, showAllSessions ? filteredSessions.length : 12).map((s) => h('tr', { key: s.id }, [
             h('td', {
@@ -1736,9 +1739,9 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
               title: s.title ?? s.id,
               style: cell({ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.label2 }),
             }, [
-              s.isSubagent ? h('span', { key: 'tag', style: { fontSize: 10, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.label3, whiteSpace: 'nowrap' } }, t('subagent')) : null,
+              s.isSubagent ? h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.label3, whiteSpace: 'nowrap' } }, t('subagent')) : null,
               s.title ?? `(${s.id.slice(0, 12)})`,
-              s.workspace ? h('span', { key: 'w', style: { fontSize: 10, color: C.label3, marginLeft: 6 } }, s.workspace) : null,
+              s.workspace ? h('span', { key: 'w', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, s.workspace) : null,
             ]),
             h('td', { key: 't', style: cell({ ...rightAlign, color: C.label3 }) }, hhmm(s.lastTime)),
             h('td', { key: 'k', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(s.hit + s.miss + s.out)),
@@ -1749,17 +1752,17 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
           filteredSessions.length > 12 ? h('tfoot', { key: 'tf' }, h('tr', null, h('td', {
             colSpan: 6,
             onClick: () => setShowAllSessions((v) => !v),
-            style: { padding: '7px 8px', fontSize: 11.5, color: C.brand, cursor: 'pointer', userSelect: 'none' },
+            style: { padding: '7px 8px', fontSize: 12.5, color: C.brand, cursor: 'pointer', userSelect: 'none' },
           }, showAllSessions ? t('collapseSessions') : `${t('showAllSessions')} (${filteredSessions.length})`))) : null,
         ])),
     ]),
 
     // provider（统计窗口口径）
     providerRows.length > 1 ? h('div', { key: 'providers', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${providerRows.length} provider`) }, t('providerBreakdown')),
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${providerRows.length} provider`) }, t('providerBreakdown')),
       h('div', { key: 'list', style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 } }, providerRows.map(([provider, value]) => h('div', {
         key: provider,
-        style: { border: `1px solid ${C.border1}`, borderRadius: 10, padding: '6px 10px', fontSize: 11.5, display: 'flex', alignItems: 'baseline', gap: 8 },
+        style: { border: `1px solid ${C.border1}`, borderRadius: 10, padding: '6px 10px', fontSize: 12.5, display: 'flex', alignItems: 'baseline', gap: 8 },
       }, [
         h('span', { key: 'p', style: { color: C.label2, fontWeight: 600 } }, provider),
         h('span', { key: 't', style: { color: C.label3, fontVariantNumeric: 'tabular-nums' } }, `${fmt(value.tokens)} tokens`),
@@ -1779,16 +1782,16 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
           [t('hitInput'), C.hit, sHit, tokOf('hit')],
         ].map(([label, color, cost, tokens]) => h('div', {
           key: label,
-          style: { display: 'grid', gridTemplateColumns: '112px 84px 76px 1fr', gap: 10, alignItems: 'center', fontSize: 12 },
+          style: { display: 'grid', gridTemplateColumns: '112px 84px 76px 1fr', gap: 10, alignItems: 'center', fontSize: 13 },
         }, [
           h('div', { key: 'n', style: { display: 'flex', alignItems: 'center', gap: 6, color: C.label2, whiteSpace: 'nowrap' } },
             [h('i', { key: 'i', style: swatch(color) }), label]),
-          h('div', { key: 'k', style: { textAlign: 'right', fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' } }, fmtM(tokens)),
+          h('div', { key: 'k', style: { textAlign: 'right', fontSize: 12, color: C.label3, fontVariantNumeric: 'tabular-nums' } }, fmtM(tokens)),
           h('div', { key: 'v', style: { textAlign: 'right', fontWeight: 650, color: C.label, fontVariantNumeric: 'tabular-nums' } }, money(cost)),
           h('div', { key: 'tr', style: { display: 'flex', alignItems: 'center', paddingRight: 40 } }, [
             h('div', { key: 'track', style: { position: 'relative', flex: 1, minWidth: 0, height: 9, borderRadius: 99, background: 'var(--dsw-alias-border-l1, rgba(128,128,128,.18))' } }, [
               h('div', { key: 'fill', style: { height: '100%', width: `${pct(cost, splitTotal).toFixed(1)}%`, background: color, borderRadius: 99 } }),
-              h('span', { key: 'p', style: { position: 'absolute', left: `calc(${pct(cost, splitTotal).toFixed(1)}% + 6px)`, top: -3, fontSize: 11, fontWeight: 600, color: C.label2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } }, `${pct(cost, splitTotal).toFixed(0)}%`),
+              h('span', { key: 'p', style: { position: 'absolute', left: `calc(${pct(cost, splitTotal).toFixed(1)}% + 6px)`, top: -3, fontSize: 12, fontWeight: 600, color: C.label2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } }, `${pct(cost, splitTotal).toFixed(0)}%`),
             ]),
           ]),
         ]))),
@@ -1805,12 +1808,12 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
       if (!historyDays.length) {
         return h('div', { key: 'hist', style: { ...S.card, minHeight: 150 } }, [
           h(SectionTitle, { key: 'h' }, t('historyTitle')),
-          h('div', { key: 'e', style: { fontSize: 12, color: C.label3, padding: '12px 0' } }, t('noDataWindow')),
+          h('div', { key: 'e', style: { fontSize: 13, color: C.label3, padding: '12px 0' } }, t('noDataWindow')),
         ]);
       }
       return h('div', { key: 'hist', style: S.card }, [
-        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 10.5 } }, `${historyDays.length} 天`) }, t('historyTitle')),
-        h('table', { key: 'tb', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 8 } }, [
+        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 11.5 } }, `${historyDays.length} 天`) }, t('historyTitle')),
+        h('table', { key: 'tb', style: { width: '100%', borderCollapse: 'collapse', fontSize: 13.5, marginTop: 8 } }, [
           tableHead(['日期', t('cost'), t('hitInput'), t('missInput'), t('output'), t('callsShort')], ['left', 'right', 'right', 'right', 'right', 'right']),
           h('tbody', { key: 'tb' }, historyDays.map((d) => h('tr', { key: d.date }, [
             h('td', { key: 'd', style: cell({ color: d.date === today ? C.brand : C.label2, fontWeight: d.date === today ? 700 : 400, whiteSpace: 'nowrap' }) }, d.date),
@@ -1830,7 +1833,7 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
     key,
     onClick: () => setter(current === key ? current : key),
     style: {
-      padding: '4px 12px', borderRadius: 8, cursor: 'pointer', userSelect: 'none', fontSize: 11.5,
+      padding: '4px 12px', borderRadius: 8, cursor: 'pointer', userSelect: 'none', fontSize: 12.5,
       border: `1px solid ${current === key ? C.brand : C.border}`,
       background: current === key ? 'var(--dsw-alias-interactive-bg-hover, rgba(47,125,255,.12))' : 'transparent',
       color: current === key ? C.label : C.label3,
@@ -1838,7 +1841,7 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
   }, label);
   const exportRow = (label, options) => h('div', {
     key: label,
-    style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 11.5, color: C.label3 },
+    style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5, color: C.label3 },
   }, [h('span', { key: 'l', style: { width: 44, flex: 'none' } }, label), ...options]);
 
   const commandLines = [
@@ -1856,21 +1859,21 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
       h('code', {
         key: 'c',
         style: {
-          flex: 1, fontSize: 11, padding: '5px 8px', borderRadius: 7, background: C.layer2,
+          flex: 1, fontSize: 12, padding: '5px 8px', borderRadius: 7, background: C.layer2,
           color: C.label2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', overflow: 'auto', whiteSpace: 'nowrap',
         },
       }, line),
       h('span', {
         key: 'cp',
         onClick: () => copyText(line, line),
-        style: { cursor: 'pointer', color: C.brand, fontSize: 11, userSelect: 'none', whiteSpace: 'nowrap' },
+        style: { cursor: 'pointer', color: C.brand, fontSize: 12, userSelect: 'none', whiteSpace: 'nowrap' },
       }, copied === line ? t('copiedShort') : t('copy')),
     ])));
 
   const exportView = h('div', { key: 'export' }, [
     h('div', { key: 'main', style: S.card }, [
       h(SectionTitle, { key: 'h' }, t('exportTitle')),
-      h('div', { key: 'hint', style: { fontSize: 11, color: C.label3, marginTop: 4, lineHeight: 1.7 } }, t('exportHint')),
+      h('div', { key: 'hint', style: { fontSize: 12, color: C.label3, marginTop: 4, lineHeight: 1.7 } }, t('exportHint')),
       h('div', { key: 'opts', style: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 } }, [
         exportRow(t('dataset'), [
           exportOption('daily', t('dsDaily'), exportDataset, setExportDataset),
@@ -1899,28 +1902,28 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
           style: {
             padding: '7px 16px', borderRadius: 9, cursor: exportState.busy ? 'default' : 'pointer',
             border: `1px solid ${C.brand}`, background: 'var(--dsw-alias-interactive-bg-hover, rgba(47,125,255,.12))',
-            color: C.brand, fontSize: 12, fontWeight: 650, opacity: exportState.busy ? 0.6 : 1,
+            color: C.brand, fontSize: 13, fontWeight: 650, opacity: exportState.busy ? 0.6 : 1,
           },
         }, exportState.busy ? t('exporting') : t('download')),
-        exportState.error ? h('span', { key: 'e', style: { fontSize: 11.5, color: C.error } }, `${t('exportFailed')}：${exportState.error}`) : null,
-        exportState.done ? h('span', { key: 'd', style: { fontSize: 11.5, color: C.ok } }, `${t('exportDone')} · ${exportState.done}`) : null,
+        exportState.error ? h('span', { key: 'e', style: { fontSize: 12.5, color: C.error } }, `${t('exportFailed')}：${exportState.error}`) : null,
+        exportState.done ? h('span', { key: 'd', style: { fontSize: 12.5, color: C.ok } }, `${t('exportDone')} · ${exportState.done}`) : null,
       ]),
-      h('div', { key: 'note', style: { fontSize: 10.5, color: C.label3, marginTop: 10, lineHeight: 1.7 } }, t('localOnlyNote')),
+      h('div', { key: 'note', style: { fontSize: 11.5, color: C.label3, marginTop: 10, lineHeight: 1.7 } }, t('localOnlyNote')),
     ]),
     h('div', { key: 'cli', style: S.card }, [
       h(SectionTitle, { key: 'h' }, t('cliTitle')),
-      h('div', { key: 'hint', style: { fontSize: 11, color: C.label3, marginTop: 4 } }, t('cliHint')),
+      h('div', { key: 'hint', style: { fontSize: 12, color: C.label3, marginTop: 4 } }, t('cliHint')),
       codeBlock('code', commandLines),
     ]),
     h('div', { key: 'api', style: S.card }, [
       h(SectionTitle, { key: 'h' }, t('apiTitle')),
-      h('div', { key: 'hint', style: { fontSize: 11, color: C.label3, marginTop: 4 } }, t('apiHint')),
+      h('div', { key: 'hint', style: { fontSize: 12, color: C.label3, marginTop: 4 } }, t('apiHint')),
       codeBlock('code', apiLines),
     ]),
   ]);
 
   /* ---------------- 页脚 ---------------- */
-  const footer = h('div', { key: 'foot', style: { marginTop: 12, fontSize: 11, color: C.label3, lineHeight: 1.8 } }, [
+  const footer = h('div', { key: 'foot', style: { marginTop: 12, fontSize: 12, color: C.label3, lineHeight: 1.8 } }, [
     h('div', { key: 'ab' },
       `${t('updated')} ${clock(at || data.generatedAt)} · ${t('partial')}${data.partialScan ? ` · ${t('scanning')}` : ''}`
       + ` · ${data.filesScanned} 个会话文件${data.filesReused > 0 ? `（复用 ${data.filesReused}）` : ''} · 扫描 ${data.elapsedMs}ms`
@@ -1955,7 +1958,7 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
     style: {
       height: '100%', overflow: 'auto', padding: '16px 18px 40px', position: 'relative',
       color: C.label, fontFamily: 'var(--dsw-font-family, system-ui, "Microsoft YaHei UI", sans-serif)',
-      fontSize: 13, boxSizing: 'border-box',
+      fontSize: 14, boxSizing: 'border-box',
     },
   }, [
     glassOn ? h('div', {
@@ -1976,9 +1979,9 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lin
     h('div', { key: 'body', style: { position: 'relative', zIndex: 1 } }, [
       h('div', { key: 'head', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 } }, [
         h('div', { key: 'ti', style: { minWidth: 0 } }, [
-          h('div', { key: 'l1', style: { fontWeight: 700, fontSize: 15 } }, [
+          h('div', { key: 'l1', style: { fontWeight: 700, fontSize: 16 } }, [
             t('title'),
-            h('span', { key: 's', style: { fontWeight: 500, fontSize: 12, color: C.label3, marginLeft: 6 } }, `· ${t('subtitle')}`),
+            h('span', { key: 's', style: { fontWeight: 500, fontSize: 13, color: C.label3, marginLeft: 6 } }, `· ${t('subtitle')}`),
           ]),
         ]),
         h('div', { key: 'sp', style: { flex: 1 } }),

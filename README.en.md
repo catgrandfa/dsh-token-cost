@@ -74,7 +74,7 @@ More:
 ### GitHub (recommended, pinned)
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.4
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.5
 ```
 
 Use `--profile web` for the web profile.
