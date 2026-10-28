@@ -638,10 +638,12 @@ Object.assign(zh, {
   'channelSplit': '渠道拆分',
   'channelCol': '渠道',
   'officialChannel': '官方渠道',
+  'accountQuota': '账号额度',
+  'apiKeyQuota': 'API Key',
   'thirdChannel': '第三方渠道',
   'channelToday': '今日',
   'channel30d': '近 30 天',
-  'channelNote': '官方渠道 = 官方用量 / 官方价；第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。',
+  'channelNote': '官方渠道拆两条：账号额度（账号登录）与 API Key（不占账号额度）；金额来自本地日志、按官方价估算。第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。',
   'historyLink': '按天历史 →',
   'customRateTag': '自定义价',
   'thirdPartyRateNote': 'GLM / Kimi 等第三方模型按明细里的固定单价计费，不适用 DeepSeek 峰谷价；官方峰谷价表只用于 DeepSeek token。',
@@ -721,10 +723,12 @@ Object.assign(en, {
   'channelSplit': 'Channel split',
   'channelCol': 'Channel',
   'officialChannel': 'Official channel',
+  'accountQuota': 'Account quota',
+  'apiKeyQuota': 'API key',
   'thirdChannel': 'Third-party channel',
   'channelToday': 'Today',
   'channel30d': 'Last 30 days',
-  'channelNote': 'Official = official usage / official rates; third-party = local logs with custom rates (built-in model rates when unset).',
+  'channelNote': 'Official splits in two: account quota (desktop sign-in) and API key (does not use the account quota); amounts come from local logs at official rates. Third-party = local logs with custom rates (built-in model rates when unset).',
   'historyLink': 'Daily history →',
   'customRateTag': 'custom rate',
   'thirdPartyRateNote': 'GLM / Kimi and other third-party models use their own flat per-model rates in the breakdown; the peak/off-peak table applies to DeepSeek tokens only.',
@@ -1157,14 +1161,25 @@ function TokenMeterPanel(props) {
     : sessionRows;
   const maxSessionCny = filteredSessions.length ? Math.max(...filteredSessions.map((s) => s.cny)) : 1;
 
-  // 渠道拆分：官方渠道合并成一行，第三方按 provider 分行；窗口用今日 / 近 30 天
+  // 渠道拆分：官方渠道按 provider 拆成「账号额度 / API Key」两条（都走官方接口，但一笔扣账号额度、
+  // 一笔走 API Key，不能并成一行），第三方按 provider 分行；窗口用今日 / 近 30 天。
+  // 官方金额取自 dayModels（本地日志；provider 维度只有本地记录），按官方价估算。
   const officialProviderSet = new Set(data.officialProviders ?? ['deepseek-official', 'deepseek-account']);
+  /** 官方 provider → 行文案：账号登录 = 账号额度；API Key 不占账号额度 */
+  const officialRowLabel = (provider) => (provider === 'deepseek-account' ? 'accountQuota'
+    : provider === 'deepseek-official' ? 'apiKeyQuota' : '');
   const channelStats = (() => {
     const cutoff30 = dayKeyOf(Date.now() - 29 * 86400000);
     const todayKey = data.today;
     const rows = new Map();
-    const touch = (rowKey, isOfficial) => {
-      if (!rows.has(rowKey)) rows.set(rowKey, { key: rowKey, official: isOfficial, provider: isOfficial ? '' : rowKey, today: { cny: 0, tokens: 0 }, d30: { cny: 0, tokens: 0 } });
+    const touch = (rowKey, isOfficial, provider) => {
+      if (!rows.has(rowKey)) {
+        rows.set(rowKey, {
+          key: rowKey, official: isOfficial, provider,
+          labelKey: isOfficial ? officialRowLabel(provider) : '',
+          today: { cny: 0, tokens: 0 }, d30: { cny: 0, tokens: 0 },
+        });
+      }
       return rows.get(rowKey);
     };
     // dayModels 的键是 `${day}|${provider} | ${model}`，取出 provider 并按天归集
@@ -1177,7 +1192,7 @@ function TokenMeterPanel(props) {
       const sep = rest.indexOf(' | ');
       const provider = sep >= 0 ? rest.slice(0, sep) : rest;
       const isOfficial = officialProviderSet.has(provider);
-      const row = touch(isOfficial ? '__official' : provider, isOfficial);
+      const row = touch(isOfficial ? `__official:${provider}` : provider, isOfficial, provider);
       const cny = Number(bucket.cny ?? 0);
       const tokens = (bucket.hit ?? 0) + (bucket.miss ?? 0) + (bucket.out ?? 0);
       row.d30.cny += cny;
@@ -1188,7 +1203,7 @@ function TokenMeterPanel(props) {
       }
     }
     if (!rows.size) {
-      // 老数据没有 dayModels：用 days / daysThirdParty 兜底，拆官方 / 第三方两行
+      // 老数据没有 dayModels：用 days / daysThirdParty 兜底，只能保留一行官方（无法再分账号 / API Key）
       const tp = data.daysThirdParty ?? {};
       const pick = (filter) => Object.entries(days)
         .filter(([day]) => filter(day))
@@ -1200,12 +1215,14 @@ function TokenMeterPanel(props) {
         }), { cny: 0, tpCny: 0, tokens: 0, tpTokens: 0 });
       const todaySum = pick((day) => day === todayKey);
       const monthSum = pick((day) => day >= cutoff30);
-      rows.set('__official', { key: '__official', official: true, provider: '', today: { cny: todaySum.cny, tokens: todaySum.tokens }, d30: { cny: monthSum.cny, tokens: monthSum.tokens } });
+      rows.set('__official', { key: '__official', official: true, provider: '', labelKey: '', today: { cny: todaySum.cny, tokens: todaySum.tokens }, d30: { cny: monthSum.cny, tokens: monthSum.tokens } });
       if (monthSum.tpCny > 0 || todaySum.tpCny > 0) {
-        rows.set('__third', { key: '__third', official: false, provider: '', today: { cny: todaySum.tpCny, tokens: todaySum.tpTokens }, d30: { cny: monthSum.tpCny, tokens: monthSum.tpTokens } });
+        rows.set('__third', { key: '__third', official: false, provider: '', labelKey: '', today: { cny: todaySum.tpCny, tokens: todaySum.tpTokens }, d30: { cny: monthSum.tpCny, tokens: monthSum.tpTokens } });
       }
     }
-    return [...rows.values()].sort((a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || b.d30.cny - a.d30.cny);
+    // 官方两行固定在前面（账号额度 → API Key → 未知官方），其余按近 30 天金额排序
+    const rank = (row) => (row.official ? (row.labelKey === 'accountQuota' ? 0 : row.labelKey === 'apiKeyQuota' ? 1 : 2) : 3);
+    return [...rows.values()].sort((a, b) => rank(a) - rank(b) || b.d30.cny - a.d30.cny);
   })();
   const channelRateKeys = data.config?.channelRates && typeof data.config.channelRates === 'object'
     ? Object.keys(data.config.channelRates) : [];
@@ -1581,6 +1598,10 @@ h('div', { key: 'budget', style: { ...S.panel, fontSize: 12.5, color: C.label2, 
           h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
             row.official
               ? h('span', { key: 'tag', style: { fontSize: 11, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
+              : null,
+            // 官方两行分别是「账号额度」和「API Key」（走 API Key 不占账号额度），不能并成一行
+            row.official
+              ? (row.labelKey ? t(row.labelKey) : '')
               : (row.provider || t('thirdChannel')),
             !row.official && row.provider && channelRateKeys.includes(row.provider)
               ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,

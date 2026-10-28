@@ -36,11 +36,14 @@ const READY = {
     '2026-10-15': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4, byHour: new Array(24).fill(0) },
   },
   providers: {
-    'deepseek-official': { calls: 187, tokens: 41.7e6, cny: 2.01 },
+    'deepseek-official': { calls: 120, tokens: 26.16e6, cny: 1.15 },
+    'deepseek-account': { calls: 67, tokens: 15.18e6, cny: 0.86 },
     'pi-ai': { calls: 5, tokens: 1.2e6, cny: 0.4 },
   },
   dayModels: {
-    '2026-10-15|deepseek-official | deepseek-flash': { hit: 41e6, miss: 2.5e5, out: 2.3e5, calls: 187, cny: 2.01 },
+    // 官方两条并列：账号登录（账号额度）与 API Key（不占账号额度）必须分开渲染
+    '2026-10-15|deepseek-official | deepseek-flash': { hit: 26e6, miss: 1.6e5, out: 1.5e5, calls: 120, cny: 1.15 },
+    '2026-10-15|deepseek-account | deepseek-flash': { hit: 15e6, miss: 9e4, out: 8e4, calls: 67, cny: 0.86 },
     '2026-10-15|pi-ai | glm-5.3': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4 },
   },
   official: {
@@ -122,9 +125,12 @@ if (!panel) {
 }
 
 let visited = 0;
+/** 收集渲染树里出现的文本：翻译函数在闸门里返回 key，可用来断言文案真的渲染了 */
+let seenText = new Set();
 const walk = (node) => {
   if (node === null || node === undefined || node === false || node === true) return;
   if (Array.isArray(node)) { node.forEach(walk); return; }
+  if (typeof node === 'string' || typeof node === 'number') { seenText.add(String(node)); return; }
   if (typeof node !== 'object') return;
   visited += 1;
   const { type, props } = node;
@@ -142,8 +148,18 @@ try {
     for (const detailRange of ranges) {
       FORCED_DETAIL = detailRange;
       visited = 0;
+      seenText = new Set();
       walk(panel({ t: (k) => k, useProjection: undefined }));
       totalVisited += visited;
+      if (view === 'overview') {
+        // 渠道拆分：账号额度与 API Key 必须各占一行；合并回「官方渠道」一行时这里会变红
+        for (const key of ['accountQuota', 'apiKeyQuota']) {
+          if (!seenText.has(key)) {
+            console.error(`FAIL: 渠道拆分没有把官方渠道按「账号额度 / API Key」拆开（缺 ${key}）`);
+            process.exit(1);
+          }
+        }
+      }
     }
   }
   FORCED_DETAIL = null;

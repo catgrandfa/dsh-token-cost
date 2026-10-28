@@ -51,7 +51,7 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (official / third-party), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend**, hourly distribution, live session usage |
+| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (account quota / API key / third-party), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend**, hourly distribution, live session usage |
 | **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals, cost composition, **daily history** |
 | **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 
@@ -167,7 +167,8 @@ that flat rate (CNY per 1M tokens, **no peak/off-peak split**):
 - Entries missing `cacheHit` / `cacheMiss` / `output` are ignored and fall back to built-in rates
 - Put it in the profile's config patch (`$DSH_HOME/profiles/<profile>/cordis.patch.yml`, under the
   `token-cost` row as `config.channelRates`) and restart DSH
-- The overview's **Channel split** card shows official vs third-party spend for today / last 30 days
+- The overview's **Channel split** card splits spend for today / last 30 days by channel: official into
+  **account quota** (desktop sign-in) and **API key** (does not use the account quota), plus one row per third party
 
 All rates, budgets, alert thresholds and refresh intervals are editable under
 **Settings → Plugins → token-cost**.

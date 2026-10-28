@@ -105,13 +105,18 @@ function demoData() {
       cacheWrite: 0,
     };
     days[key] = entry;
-    for (const [model, share] of [['deepseek-flash', 0.82], ['deepseek-v4-pro', 0.18]]) {
-      const h = Math.round(hit * share), m = Math.round(miss * share), o = Math.round(out * share);
-      dayModels[`${key}|deepseek-account | ${model}`] = {
-        miss: m, hit: h, out: o, calls: Math.round(calls * share),
-        cny: Number(((h / 1e6) * 0.02 + (m / 1e6) * 1 + (o / 1e6) * 4).toFixed(6)),
-        hitRate: Number(((100 * h) / (h + m)).toFixed(1)),
-      };
+    // 官方两条并列：账号登录（账号额度）与 API Key（不占账号额度）。
+    // 演示数据按 65% / 35% 拆开，截图里能同时看到两行。
+    for (const [provider, providerShare] of [['deepseek-account', 0.65], ['deepseek-official', 0.35]]) {
+      for (const [model, share] of [['deepseek-flash', 0.82], ['deepseek-v4-pro', 0.18]]) {
+        const w = share * providerShare;
+        const h = Math.round(hit * w), m = Math.round(miss * w), o = Math.round(out * w);
+        dayModels[`${key}|${provider} | ${model}`] = {
+          miss: m, hit: h, out: o, calls: Math.round(calls * w),
+          cny: Number(((h / 1e6) * 0.02 + (m / 1e6) * 1 + (o / 1e6) * 4).toFixed(6)),
+          hitRate: Number(((100 * h) / (h + m)).toFixed(1)),
+        };
+      }
     }
   }
   const models = {};
@@ -190,6 +195,8 @@ function demoData() {
   const deepseekCalls = Object.values(days).reduce((sum, day) => sum + day.calls, 0) - thirdParty.calls;
   const deepseekTokens = Object.values(days).reduce((sum, day) => sum + day.hit + day.miss + day.out, 0) - thirdParty.tokens;
   const deepseekCny = Number((Object.values(days).reduce((sum, day) => sum + day.cny, 0) - thirdParty.cny).toFixed(6));
+  const accountShare = 0.65;
+  const accountCny = Number((deepseekCny * accountShare).toFixed(6));
 
   return {
     summary: {
@@ -204,7 +211,8 @@ function demoData() {
       models,
       dayModels,
       providers: {
-        'deepseek-account': { calls: deepseekCalls, tokens: deepseekTokens, cny: deepseekCny },
+        'deepseek-account': { calls: Math.round(deepseekCalls * accountShare), tokens: Math.round(deepseekTokens * accountShare), cny: accountCny },
+        'deepseek-official': { calls: deepseekCalls - Math.round(deepseekCalls * accountShare), tokens: deepseekTokens - Math.round(deepseekTokens * accountShare), cny: Number((deepseekCny - accountCny).toFixed(6)) },
         'pi-ai': { calls: thirdParty.calls, tokens: thirdParty.tokens, cny: thirdParty.cny },
       },
       today: todayKey,
@@ -231,7 +239,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.0', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.6', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },
