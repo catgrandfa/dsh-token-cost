@@ -733,6 +733,9 @@ const BLANK_DAY = {
   byHour: new Array(24).fill(0), peakCalls: 0,
 };
 
+/** 北京时间 'YYYY-MM-DD' 日键（浏览器半侧；与宿主 core.mjs 的 dayKeyOf 同口径） */
+const dayKeyOf = (ms) => new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
+
 /** 自然月 / 自然季度 / 自然年的起始日期键（北京时间，'YYYY-MM-DD'） */
 function naturalStartKeyOf(kind, todayKey) {
   const year = todayKey.slice(0, 4);

@@ -43,6 +43,8 @@ const NO_BUDGET = {
 };
 let ACTIVE = READY;
 let FORCED_VIEW = null;
+/** 明细窗口状态在真实面板里由 chip 切换；闸门逐个窗口渲染，覆盖所有分支 */
+let FORCED_DETAIL = null;
 
 const React = {
   createElement: (type, props, ...children) => ({
@@ -54,6 +56,8 @@ const React = {
   useState: (init) => {
     // 视图状态（初值 'overview'）在渲染门禁里强制切换，覆盖三个视图分支
     if (init === 'overview') return [FORCED_VIEW ?? 'overview', () => {}];
+    // 明细窗口状态（初值 'today'）同样逐个强制，覆盖 近7天/近30天/月/季/年 分支
+    if (init === 'today') return [FORCED_DETAIL ?? 'today', () => {}];
     const value = typeof init === 'function' ? init() : init;
     if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
       return [{
@@ -112,14 +116,20 @@ const walk = (node) => {
 };
 
 let totalVisited = 0;
+const DETAIL_RANGES = ['today', '7d', '30d', 'month', 'quarter', 'year'];
 try {
   for (const view of ['overview', 'detail', 'export']) {
     FORCED_VIEW = view;
     ACTIVE = READY;
-    visited = 0;
-    walk(panel({ t: (k) => k, useProjection: undefined }));
-    totalVisited += visited;
+    const ranges = view === 'detail' ? DETAIL_RANGES : [null];
+    for (const detailRange of ranges) {
+      FORCED_DETAIL = detailRange;
+      visited = 0;
+      walk(panel({ t: (k) => k, useProjection: undefined }));
+      totalVisited += visited;
+    }
   }
+  FORCED_DETAIL = null;
   // 无预算（只记录花费）分支
   FORCED_VIEW = 'overview';
   ACTIVE = NO_BUDGET;
