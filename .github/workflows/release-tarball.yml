@@ -1,0 +1,54 @@
+# 给已有 tag 的 GitHub Release 附加预构建 tarball。
+#
+# 目的：插件市场（awesome-dsh-plugin 的条目）用 `tarball:` 字段指向
+#   https://github.com/catgrandfa/dsh-token-cost/releases/download/<tag>/dsh-token-cost.tgz
+# 预构建包让用户装的时候跳过 pnpm 的 allowBuilds 构建授权；源码安装仍然可用。
+#
+# 资产名刻意不带版本号：`latest/download/` 只解析 latest、文件名照字面取，
+# 带版本号的资产名会在下次发版时 404。这里钉 tag，名字保持 `dsh-token-cost.tgz`。
+#
+# 手动触发：Actions → release-tarball → Run workflow → 填已有 tag（如 v0.3.7）。
+name: release-tarball
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已有 tag（如 v0.3.7）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # lib/client.js 是入库的构建产物，因此不需要 npm install 也不需要 build，
+      # 直接打包即可（--ignore-scripts 跳过 prepublishOnly 的 build + test）。
+      - name: Pack
+        run: |
+          set -euo pipefail
+          npm pack --ignore-scripts
+          mv dsh-token-cost-*.tgz dsh-token-cost.tgz
+          ls -l dsh-token-cost.tgz
+          tar -tzf dsh-token-cost.tgz | grep -E 'package/(lib/client\.js|cordis\.patch\.yml|package\.json)$'
+
+      - name: Create release if absent and upload the tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "$TAG" --notes "预构建 tarball（供插件市场的 tarball: 字段使用）。源码安装：dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#$TAG"
+          gh release upload "$TAG" dsh-token-cost.tgz --clobber
+          gh release view "$TAG" --json url,assets
