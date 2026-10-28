@@ -642,6 +642,7 @@ Object.assign(zh, {
   'channelToday': '今日',
   'channel30d': '近 30 天',
   'channelNote': '官方渠道 = 官方用量 / 官方价；第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。',
+  'historyLink': '按天历史 →',
   'customRateTag': '自定义价',
   'thirdPartyRateNote': 'GLM / Kimi 等第三方模型按明细里的固定单价计费，不适用 DeepSeek 峰谷价；官方峰谷价表只用于 DeepSeek token。',
   'budgetOff': '仅记录花费（未设每日预算）',
@@ -724,6 +725,7 @@ Object.assign(en, {
   'channelToday': 'Today',
   'channel30d': 'Last 30 days',
   'channelNote': 'Official = official usage / official rates; third-party = local logs with custom rates (built-in model rates when unset).',
+  'historyLink': 'Daily history →',
   'customRateTag': 'custom rate',
   'thirdPartyRateNote': 'GLM / Kimi and other third-party models use their own flat per-model rates in the breakdown; the peak/off-peak table applies to DeepSeek tokens only.',
   'budgetOff': 'Record only (no daily budget)',
@@ -743,6 +745,13 @@ Object.assign(en, {
 /* ------------------------------------------------------------------ *
  * 新面板：三视图（总览 / 明细 / 导出）
  * ------------------------------------------------------------------ */
+const LAYOUT_STYLE_ID = 'dsh-tm-layout-v1';
+if (typeof document !== 'undefined' && !document.getElementById(LAYOUT_STYLE_ID)) {
+  const layoutStyle = document.createElement('style');
+  layoutStyle.id = LAYOUT_STYLE_ID;
+  layoutStyle.textContent = '@container (max-width: 860px) { .dsh-tm-cols { grid-template-columns: minmax(0, 1fr) !important; } }';
+  (document.head ?? document.documentElement)?.appendChild(layoutStyle);
+}
 const h = React.createElement;
 const BLANK_DAY = {
   miss: 0, hit: 0, out: 0, calls: 0, cny: 0, hitRate: null,
@@ -882,19 +891,56 @@ function TokenMeterPanel(props) {
   }, []);
 
   if (status === 'loading' && !data) {
-    return h('div', {
-      style: { padding: 28, color: C.label3, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 },
-    }, [
-      h('span', {
-        key: 'sp',
-        style: {
-          width: 12, height: 12, borderRadius: '50%', display: 'inline-block',
-          border: `2px solid ${C.border}`, borderTopColor: C.brand,
-          animation: 'dsh-tm-spin .8s linear infinite',
-        },
-      }),
-      h('span', { key: 't' }, `${t('firstLoad')} ${waitSec}s`),
-      h('span', { key: 'h', style: { fontSize: 11, color: C.label3 } }, t('firstLoadHint')),
+    // 首屏骨架：卡片尺寸与加载完成后的布局一致，避免数据到达时整页跳动
+    const skLine = (key, width, height = 8, extra = {}) => h('div', {
+      key, style: { width, height, borderRadius: 4, background: C.border1, opacity: 0.5, ...extra },
+    });
+    const skCard = (key, surface, minHeight, children) => h('div', {
+      key, style: { ...surface, marginTop: 0, minHeight, display: 'flex', flexDirection: 'column', gap: 8, boxSizing: 'border-box' },
+    }, children);
+    const spinner = h('span', {
+      key: 'sp',
+      style: {
+        width: 12, height: 12, borderRadius: '50%', display: 'inline-block',
+        border: `2px solid ${C.border}`, borderTopColor: C.brand, animation: 'dsh-tm-spin .8s linear infinite',
+      },
+    });
+    return h('div', { key: 'skeleton', style: { opacity: 0.85 } }, [
+      h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', { key: 'grid', className: 'dsh-tm-cols', style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' } }, [
+        h('div', { key: 'left', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
+          skCard('spend', S.panel, 290, [
+            h('div', { key: 'l', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.label3 } }, [
+              spinner, h('span', { key: 't' }, `${t('firstLoad')} ${waitSec}s`),
+            ]),
+            skLine('a', '42%', 10),
+            skLine('b', '100%', 40, { opacity: 0.3 }),
+            skLine('c', '86%', 10),
+            skLine('d', '58%', 10),
+          ]),
+          skCard('trend', S.card, 360, [
+            skLine('h', '32%', 9),
+            h('div', { key: 'chart', style: { height: 116, borderRadius: 8, background: C.border1, opacity: 0.3 } }),
+            skLine('x', '100%', 8),
+            h('div', { key: 'hourly', style: { height: 54, borderRadius: 8, background: C.border1, opacity: 0.3, marginTop: 10 } }),
+          ]),
+          skCard('budget', S.panel, 280, [
+            skLine('h', '28%', 9), skLine('a', '100%', 8), skLine('b', '66%', 8),
+            h('div', { key: 'sep', style: { height: 1, background: C.border1, margin: '6px 0' } }),
+            skLine('c', '100%', 8), skLine('d', '52%', 8),
+          ]),
+        ]),
+        h('div', { key: 'right', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
+          skCard('channels', S.card, 250, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12)]),
+          skCard('stats', S.panel, 335, [
+            skLine('h', '36%', 9),
+            h('div', { key: 'g', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
+              [0, 1, 2, 3].map((i) => h('div', { key: i, style: { height: 54, borderRadius: 10, background: C.border1, opacity: 0.42 } }))),
+            skLine('l', '100%', 8),
+          ]),
+          skCard('rates', S.panel, 365, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12), skLine('d', '100%', 12), skLine('e', '64%', 9)]),
+        ]),
+      ])),
+      h('div', { key: 'hint', style: { marginTop: 8, fontSize: 10.5, color: C.label3 } }, t('firstLoadHint')),
     ]);
   }
   if (status === 'failed' && !data) {
@@ -1246,12 +1292,13 @@ function TokenMeterPanel(props) {
 
   /* ---------------- 概览 ---------------- */
   const overview = h('div', { key: 'overview' }, [
-    // 第一行：今日消费 + 预算 / 余额
-    h('div', {
-      key: 'hero',
-      style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 },
+    h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', {
+      key: 'grid',
+      className: 'dsh-tm-cols',
+      style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' },
     }, [
-      h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'column', gap: 8 } }, [
+      h('div', { key: 'left', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
+h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 290 } }, [
         h('div', { key: 'l', style: { fontSize: 12, color: C.label2 } }, `${t('today')} · ${today}`),
         h('div', {
           key: 'n',
@@ -1308,8 +1355,101 @@ function TokenMeterPanel(props) {
           style: { fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' },
         }, `${t('totalSpent')} ¥${fmtMoney(balCost)}`) : null,
       ]),
-
-      h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, display: 'flex', flexDirection: 'column', gap: 8 } }, [
+      h('div', { key: 'trend', style: { ...S.card, marginTop: 0, minHeight: 360 } }, [
+      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6 } }, [
+        h(Chip, { key: 'r7', active: range === 7, onClick: () => setRange(7) }, t('range7')),
+        h(Chip, { key: 'r30', active: range === 30, onClick: () => setRange(30) }, t('range30')),
+        h('span', { key: 'hist', onClick: () => setView('detail'), style: { fontSize: 10.5, color: C.brand, cursor: 'pointer', userSelect: 'none', padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.brand}`, whiteSpace: 'nowrap' } }, t('historyLink')),
+        dataDays < 3 ? h('span', {
+          key: 'few',
+          style: { fontSize: 10.5, color: C.label3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' },
+        }, t('fewDays')) : null,
+      ]) }, t('trend')),
+      (() => {
+        const points = trend_.map(({ key, entry }, index) => {
+          const total = entry ? entry.hit + entry.miss + entry.out : 0;
+          const isToday = key === today;
+          const tooltip = entry
+            ? `${key}${isToday ? ` · ${t('today')}` : ''}\n${t('cost')} ${money(entry.cny)} · ${entry.calls} ${t('calls')}\n${t('hitInput')} ${fmt(entry.hit)} · ${t('missInput')} ${fmt(entry.miss)} · ${t('output')} ${fmt(entry.out)}`
+            : `${key} · ${t('zeroDays')}`;
+          return { key, index, total, cny: Number(entry?.cny ?? 0), isToday, tooltip };
+        });
+        const maxY = Math.max(...points.map((p) => p.cny), 1e-9) * 1.12;
+        const W = 100, H = 44;
+        const xOf = (i) => (points.length > 1 ? (i / (points.length - 1)) * W : W / 2);
+        const yOf = (v) => H - (v / maxY) * H;
+        const line = points.map((p) => `${xOf(p.index).toFixed(2)},${yOf(p.cny).toFixed(2)}`).join(' ');
+        const isActive = (p) => (selDay ? selDay === p.key : p.isToday);
+        return h('div', { key: 'chart', style: { position: 'relative', height: 116, marginTop: 10 } }, [
+          h('svg', {
+            key: 'svg', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none',
+            width: '100%', height: '100%', style: { display: 'block', overflow: 'visible' },
+          }, [
+            h('defs', { key: 'd' }, h('linearGradient', { id: `tc-trend-${range}`, x1: 0, y1: 0, x2: 0, y2: 1 }, [
+              h('stop', { key: 'a', offset: '0%', stopColor: C.hit, stopOpacity: 0.25 }),
+              h('stop', { key: 'b', offset: '100%', stopColor: C.hit, stopOpacity: 0 }),
+            ])),
+            ...[0.25, 0.5, 0.75, 1].map((f) => h('line', {
+              key: `g${f}`, x1: 0, x2: W, y1: H * f, y2: H * f,
+              stroke: 'currentColor', strokeOpacity: 0.08, strokeWidth: 0.3, vectorEffect: 'non-scaling-stroke',
+            })),
+            h('polygon', { key: 'area', points: `0,${H} ${line} ${W},${H}`, fill: `url(#tc-trend-${range})` }),
+            h('polyline', {
+              key: 'line', points: line, fill: 'none', stroke: C.hit, strokeWidth: 1.4,
+              strokeLinejoin: 'round', strokeLinecap: 'round', vectorEffect: 'non-scaling-stroke',
+            }),
+          ]),
+          ...points.map((p) => h('div', {
+            key: `p-${p.key}`,
+            title: `${p.tooltip}\n${t('clickForSplit')}`,
+            onClick: () => setSelDay(selDay === p.key ? null : p.key),
+            style: {
+              position: 'absolute', left: `calc(${xOf(p.index).toFixed(2)}% - 3px)`,
+              top: `calc(${((yOf(p.cny) / H) * 100).toFixed(2)}% - 3px)`,
+              width: isActive(p) ? 7 : 5, height: isActive(p) ? 7 : 5, borderRadius: '50%',
+              background: isActive(p) ? C.brand : C.hit, opacity: p.total > 0 ? 1 : 0.25,
+              cursor: 'pointer', zIndex: 2,
+            },
+          })),
+        ]);
+      })(),
+      h('div', {
+        key: 'x',
+        style: {
+          display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 4,
+          borderTop: `1px solid ${C.border1}`, fontSize: 10, color: C.label3, fontVariantNumeric: 'tabular-nums',
+        },
+      }, [
+        h('span', { key: 'a' }, trend_[0]?.key?.slice(5) ?? ''),
+        h('span', { key: 'b' }, trend_[Math.floor(trend_.length / 2)]?.key?.slice(5) ?? ''),
+        h('span', { key: 'c', style: { color: C.brand, fontWeight: 700 } }, t('today')),
+      ]),
+      h('div', { key: 'hr', style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border1}` } }, [
+        h('div', { key: 'hh', style: { display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.label3, gap: 8 } }, [
+          h('span', { key: 't', style: { fontWeight: 650, color: C.label2 } }, t('byHour')),
+          h('span', { key: 'sp', style: { flex: 1 } }),
+          h('span', { key: 'p' }, `${String(peakHour).padStart(2, '0')}:00 · ${t('peakHourLabel')} ${fmt(maxHour)} tokens`),
+        ]),
+        h('div', { key: 'bars', style: { position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 42, marginTop: 22 } }, [
+          ...[50, 100].map((p) => h('div', { key: `grid${p}`, style: { position: 'absolute', left: 0, right: 0, bottom: `${p}%`, borderTop: `1px dashed ${C.border1}`, pointerEvents: 'none' } })),
+          ...Array.from({ length: 24 }, (_, hour) => h('div', {
+            key: hour,
+            title: `${String(hour).padStart(2, '0')}:00 · ${fmt(D.byHour?.[hour] ?? 0)} tokens`,
+            style: {
+              position: 'relative', zIndex: 1, flex: 1, minHeight: 2,
+              height: `${Math.max(((D.byHour?.[hour] ?? 0) / maxHour) * 100, 1.5)}%`,
+              background: peakHoursToday[hour] ? C.miss : C.hit,
+              opacity: hour === peakHour ? 1 : 0.72, borderRadius: '2px 2px 0 0',
+            },
+          })),
+        ]),
+        h('div', { key: 'ax', style: { display: 'flex', gap: 2, fontSize: 9, color: C.label3, marginTop: 4 } },
+          Array.from({ length: 24 }, (_, hour) => h('span', {
+            key: hour, style: { flex: 1, minWidth: 0, textAlign: 'center', fontVariantNumeric: 'tabular-nums' },
+          }, String(hour).padStart(2, '0')))),
+      ]),
+      ]),
+h('div', { key: 'budget', style: { ...S.panel, fontSize: 11.5, color: C.label2, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 280 } }, [
         h('div', { key: 'h', style: { fontSize: 12, fontWeight: 650, color: C.label2 } }, t('budgetCard')),
         h('div', { key: 'b1' }, [
           h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, marginBottom: 5 } }, [
@@ -1428,14 +1568,27 @@ function TokenMeterPanel(props) {
           }, `${t('billingLink')} ↗`)),
         ]),
       ]),
-    ]),
-
-    // 第二行：token 统计 + 峰谷价
-    h('div', {
-      key: 'statsRow',
-      style: { display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12, marginTop: 12 },
-    }, [
-      h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start' } }, [
+      ]),
+      h('div', { key: 'right', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
+      h('div', { key: 'channels', style: { ...S.card, marginTop: 0, minHeight: 250 } }, [
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
+      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
+        tableHead([t('channelCol'), t('channelToday'), t('channel30d')]),
+        h('tbody', { key: 'tb' }, channelStats.map((row) => h('tr', { key: row.key }, [
+          h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+            row.official
+              ? h('span', { key: 'tag', style: { fontSize: 10, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
+              : (row.provider || t('thirdChannel')),
+            !row.official && row.provider && channelRateKeys.includes(row.provider)
+              ? h('span', { key: 'r', style: { fontSize: 10, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+          ]),
+          h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
+          h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
+        ]))),
+      ])),
+      h('div', { key: 'note', style: { fontSize: 10.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
+      ]),
+h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start', minHeight: 335 } }, [
         h(Stat, { key: '1', t, surface: S.stat, label: t('hitInput'), color: C.hit, value: fmt(D.hit) }),
         h(Stat, { key: '2', t, surface: S.stat, label: t('hitRate'), value: D.hitRate === null || D.hitRate === undefined ? '—' : `${D.hitRate}`, unit: '%' }),
         h(Stat, { key: '3', t, surface: S.stat, label: t('missInput'), color: C.miss, value: fmt(D.miss) }),
@@ -1465,8 +1618,7 @@ function TokenMeterPanel(props) {
           ];
         })()),
       ]),
-
-      h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lineHeight: 1.7 } }, [
+h('div', { key: 'rates', style: { ...S.panel, fontSize: 11, color: C.label3, lineHeight: 1.7, minHeight: 365 } }, [
         h('div', { key: 'h', style: { fontSize: 12, fontWeight: 650, color: C.label2 } }, t('tierTitle')),
         h('div', { key: 'tier', style: { marginTop: 4 } }, [
           h('span', { key: 'l', style: { color: C.label2, fontWeight: 600 } }, `${t('currentTier')}：`),
@@ -1507,181 +1659,8 @@ function TokenMeterPanel(props) {
         h('div', { key: 'note', style: { fontSize: 10.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
         hasThirdParty ? h('div', { key: 'third', style: { fontSize: 10.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
       ]),
-    ]),
-
-    // 渠道拆分：官方渠道 vs 第三方渠道（今日 / 近 30 天）
-    h('div', { key: 'channels', style: { ...S.card, marginTop: 12 } }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
-      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
-        tableHead([t('channelCol'), t('channelToday'), t('channel30d')]),
-        h('tbody', { key: 'tb' }, channelStats.map((row) => h('tr', { key: row.key }, [
-          h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
-            row.official
-              ? h('span', { key: 'tag', style: { fontSize: 10, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
-              : (row.provider || t('thirdChannel')),
-            !row.official && row.provider && channelRateKeys.includes(row.provider)
-              ? h('span', { key: 'r', style: { fontSize: 10, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
-          ]),
-          h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
-          h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
-        ]))),
-      ])),
-      h('div', { key: 'note', style: { fontSize: 10.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
-    ]),
-
-    // 趋势
-    h('div', { key: 'trend', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6 } }, [
-        h(Chip, { key: 'r7', active: range === 7, onClick: () => setRange(7) }, t('range7')),
-        h(Chip, { key: 'r30', active: range === 30, onClick: () => setRange(30) }, t('range30')),
-        dataDays < 3 ? h('span', {
-          key: 'few',
-          style: { fontSize: 10.5, color: C.label3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' },
-        }, t('fewDays')) : null,
-      ]) }, t('trend')),
-      h('div', {
-        key: 'bars',
-        style: {
-          position: 'relative', display: 'flex', alignItems: 'flex-end', gap: range > 10 ? 3 : 8,
-          height: 108, marginTop: 16, justifyContent: trend_.length <= 4 ? 'center' : 'flex-start',
-        },
-      }, trend_.map(({ key, entry }) => {
-        const total = entry ? entry.hit + entry.miss + entry.out : 0;
-        const heightPct = total > 0 ? Math.max(4, (total / maxTotal) * 100) : 2;
-        const isToday = key === today;
-        const selected = selDay ? selDay === key : isToday;
-        const label = `${key}${isToday ? ` · ${t('today')}` : ''}`;
-        const tooltip = entry
-          ? `${label}\n${t('cost')} ${money(entry.cny)} · ${entry.calls} ${t('calls')}\n${t('hitInput')} ${fmt(entry.hit)} · ${t('missInput')} ${fmt(entry.miss)} · ${t('output')} ${fmt(entry.out)}`
-          : `${label} · ${t('zeroDays')}`;
-        return h('div', {
-          key,
-          title: `${tooltip}\n${t('clickForSplit')}`,
-          onClick: () => setSelDay(selDay === key ? null : key),
-          style: {
-            flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-            outline: selected ? `1px dashed ${C.brand}` : 'none', outlineOffset: 2, borderRadius: 6,
-            minWidth: 0, cursor: 'pointer', maxWidth: trend_.length <= 4 ? 78 : 'none', position: 'relative',
-          },
-        }, [
-          total > 0 ? h('div', {
-            key: 'val',
-            style: {
-              position: 'absolute', left: 0, right: 0, bottom: `calc(${heightPct}% + 5px)`, textAlign: 'center',
-              fontSize: trend_.length <= 7 ? 10.5 : 9.5, fontWeight: 600, color: isToday ? C.brand : C.label2,
-              fontVariantNumeric: 'tabular-nums', pointerEvents: 'none', whiteSpace: 'nowrap',
-            },
-          }, entry.cny > 0 ? (trend_.length <= 7 ? money(entry.cny) : `¥${Math.round(entry.cny)}`) : '') : null,
-          total > 0 ? h('div', {
-            key: 's',
-            style: {
-              height: `${heightPct}%`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-              borderRadius: '5px 5px 3px 3px', overflow: 'hidden', width: heightPct < 10 ? '46%' : '100%',
-              alignSelf: 'center', minWidth: 6,
-            },
-          }, [
-            h('div', { key: 'o', style: { flex: Math.max(entry.out, 1), minHeight: 3, background: C.out } }),
-            h('div', { key: 'm', style: { flex: Math.max(entry.miss, 1), minHeight: 3, background: C.miss } }),
-            h('div', { key: 'h', style: { flex: Math.max(entry.hit, 1), minHeight: 3, background: C.hit } }),
-          ]) : h('div', {
-            key: 'z',
-            style: { height: '2%', minHeight: 2, background: 'var(--dsw-alias-border-l2, rgba(128,128,128,.3))', borderRadius: 3 },
-          }),
-        ]);
-      })),
-      h('div', {
-        key: 'x',
-        style: {
-          display: 'flex', gap: range > 10 ? 3 : 8, marginTop: 6, paddingTop: 4,
-          borderTop: `1px solid ${C.border1}`, justifyContent: trend_.length <= 4 ? 'center' : 'flex-start',
-        },
-      }, trend_.length > 31
-        ? [h('div', { key: 'range', style: { flex: 1, textAlign: 'center', fontSize: 10, color: C.label3 } }, `${trend_[0].key.slice(5)} → ${trend_[trend_.length - 1].key.slice(5)}`)]
-        : trend_.map(({ key }, index) => h('div', {
-          key,
-          style: {
-            flex: 1, textAlign: 'center', fontSize: 10, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
-            color: key === today ? C.brand : C.label3, opacity: days[key] ? 1 : 0.4,
-            fontWeight: key === today ? 700 : 400, maxWidth: trend_.length <= 4 ? 78 : 'none',
-          },
-        }, key === today ? t('today') : (index % 3 === 0 ? key.slice(5) : '')))),
-      h('div', { key: 'hr', style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border1}` } }, [
-        h('div', { key: 'hh', style: { display: 'flex', alignItems: 'center', fontSize: 11.5, color: C.label3, gap: 8 } }, [
-          h('span', { key: 't', style: { fontWeight: 650, color: C.label2 } }, t('byHour')),
-          h('span', { key: 'sp', style: { flex: 1 } }),
-          h('span', { key: 'p' }, `${String(peakHour).padStart(2, '0')}:00 · ${t('peakHourLabel')} ${fmt(maxHour)} tokens`),
-        ]),
-        h('div', { key: 'bars', style: { position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 42, marginTop: 22 } }, [
-          ...[50, 100].map((p) => h('div', { key: `grid${p}`, style: { position: 'absolute', left: 0, right: 0, bottom: `${p}%`, borderTop: `1px dashed ${C.border1}`, pointerEvents: 'none' } })),
-          ...Array.from({ length: 24 }, (_, hour) => h('div', {
-            key: hour,
-            title: `${String(hour).padStart(2, '0')}:00 · ${fmt(D.byHour?.[hour] ?? 0)} tokens`,
-            style: {
-              position: 'relative', zIndex: 1, flex: 1, minHeight: 2,
-              height: `${Math.max(((D.byHour?.[hour] ?? 0) / maxHour) * 100, 1.5)}%`,
-              background: peakHoursToday[hour] ? C.miss : C.hit,
-              opacity: hour === peakHour ? 1 : 0.72, borderRadius: '2px 2px 0 0',
-            },
-          })),
-        ]),
-        h('div', { key: 'ax', style: { display: 'flex', gap: 2, fontSize: 9, color: C.label3, marginTop: 4 } },
-          Array.from({ length: 24 }, (_, hour) => h('span', {
-            key: hour, style: { flex: 1, minWidth: 0, textAlign: 'center', fontVariantNumeric: 'tabular-nums' },
-          }, String(hour).padStart(2, '0')))),
       ]),
-    ]),
-
-    // 成本构成
-    h('div', { key: 'split', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 8, alignItems: 'baseline' } }, [
-        splitDay === today ? null : h('span', { key: 'back', onClick: () => setSelDay(null), style: { cursor: 'pointer', color: C.brand, userSelect: 'none' } }, `↩ ${t('today')}`),
-        h('span', { key: 'tot', style: { color: C.label3, fontVariantNumeric: 'tabular-nums' } }, `${t('fromOfficial')} ${money((sHit + sMiss + sOut) || SD.cny || 0)}`),
-      ]) }, `${splitDay === today ? t('costSplit') : `${t('costSplit')} · ${splitDay.slice(5)}`}`),
-      h('div', { key: 'rows', style: { display: 'flex', flexDirection: 'column', gap: 9, marginTop: 10 } },
-        [
-          [t('output'), C.out, sOut, tokOf('out')],
-          [t('missInput'), C.miss, sMiss, tokOf('miss')],
-          [t('hitInput'), C.hit, sHit, tokOf('hit')],
-        ].map(([label, color, cost, tokens]) => h('div', {
-          key: label,
-          style: { display: 'grid', gridTemplateColumns: '112px 84px 76px 1fr', gap: 10, alignItems: 'center', fontSize: 12 },
-        }, [
-          h('div', { key: 'n', style: { display: 'flex', alignItems: 'center', gap: 6, color: C.label2, whiteSpace: 'nowrap' } },
-            [h('i', { key: 'i', style: swatch(color) }), label]),
-          h('div', { key: 'k', style: { textAlign: 'right', fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' } }, fmtM(tokens)),
-          h('div', { key: 'v', style: { textAlign: 'right', fontWeight: 650, color: C.label, fontVariantNumeric: 'tabular-nums' } }, money(cost)),
-          h('div', { key: 'tr', style: { display: 'flex', alignItems: 'center', paddingRight: 40 } }, [
-            h('div', { key: 'track', style: { position: 'relative', flex: 1, minWidth: 0, height: 9, borderRadius: 99, background: 'var(--dsw-alias-border-l1, rgba(128,128,128,.18))' } }, [
-              h('div', { key: 'fill', style: { height: '100%', width: `${pct(cost, splitTotal).toFixed(1)}%`, background: color, borderRadius: 99 } }),
-              h('span', { key: 'p', style: { position: 'absolute', left: `calc(${pct(cost, splitTotal).toFixed(1)}% + 6px)`, top: -3, fontSize: 11, fontWeight: 600, color: C.label2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } }, `${pct(cost, splitTotal).toFixed(0)}%`),
-            ]),
-          ]),
-        ]))),
-    ]),
-
-    // 历史（按天）
-    (() => {
-      const historyDays = Object.keys(days).sort().reverse().slice(0, 30)
-        .map((key) => ({ date: key, ...(days[key] ?? {}) }))
-        .filter((d) => (d.cny ?? 0) > 0 || (d.calls ?? 0) > 0);
-      if (!historyDays.length) return null;
-      return h('div', { key: 'hist', style: S.card }, [
-        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 10.5 } }, meterOfficial ? `platform.deepseek.com/api/v0/usage · ${historyDays.length} 天` : meterMixed ? `${t('mixedShort')} · ${historyDays.length} 天` : `${t('localShort')} · ${historyDays.length} 天`) }, t('historyTitle')),
-        h('table', { key: 'tb', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 8 } }, [
-          tableHead(['日期', t('cost'), t('hitInput'), t('missInput'), t('output'), t('callsShort')], ['left', 'right', 'right', 'right', 'right', 'right']),
-          h('tbody', { key: 'tb' }, historyDays.map((d) => h('tr', { key: d.date }, [
-            h('td', { key: 'd', style: cell({ color: d.date === today ? C.brand : C.label2, fontWeight: d.date === today ? 700 : 400, whiteSpace: 'nowrap' }) }, d.date),
-            h('td', { key: 'c', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }) }, money(d.cny)),
-            h('td', { key: 'h', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.hit)),
-            h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.miss)),
-            h('td', { key: 'o', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.out)),
-            h('td', { key: 'n', style: cell({ ...rightAlign, color: C.label3 }) }, d.calls ?? 0),
-          ]))),
-        ]),
-      ]);
-    })(),
-
-    // 本会话实时
+    ])),
     live ? h('div', { key: 'live', style: S.card }, [
       h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, t('liveHint')) }, t('live')),
       h('div', {
@@ -1787,6 +1766,63 @@ function TokenMeterPanel(props) {
         h('span', { key: 'c', style: { color: C.label2, fontVariantNumeric: 'tabular-nums' } }, `¥${fmtMoney(value.cny)}`),
       ]))),
     ]) : null,
+ 
+      h('div', { key: 'split', style: S.card }, [
+      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 8, alignItems: 'baseline' } }, [
+        splitDay === today ? null : h('span', { key: 'back', onClick: () => setSelDay(null), style: { cursor: 'pointer', color: C.brand, userSelect: 'none' } }, `↩ ${t('today')}`),
+        h('span', { key: 'tot', style: { color: C.label3, fontVariantNumeric: 'tabular-nums' } }, `${t('fromOfficial')} ${money((sHit + sMiss + sOut) || SD.cny || 0)}`),
+      ]) }, `${splitDay === today ? t('costSplit') : `${t('costSplit')} · ${splitDay.slice(5)}`}`),
+      h('div', { key: 'rows', style: { display: 'flex', flexDirection: 'column', gap: 9, marginTop: 10 } },
+        [
+          [t('output'), C.out, sOut, tokOf('out')],
+          [t('missInput'), C.miss, sMiss, tokOf('miss')],
+          [t('hitInput'), C.hit, sHit, tokOf('hit')],
+        ].map(([label, color, cost, tokens]) => h('div', {
+          key: label,
+          style: { display: 'grid', gridTemplateColumns: '112px 84px 76px 1fr', gap: 10, alignItems: 'center', fontSize: 12 },
+        }, [
+          h('div', { key: 'n', style: { display: 'flex', alignItems: 'center', gap: 6, color: C.label2, whiteSpace: 'nowrap' } },
+            [h('i', { key: 'i', style: swatch(color) }), label]),
+          h('div', { key: 'k', style: { textAlign: 'right', fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' } }, fmtM(tokens)),
+          h('div', { key: 'v', style: { textAlign: 'right', fontWeight: 650, color: C.label, fontVariantNumeric: 'tabular-nums' } }, money(cost)),
+          h('div', { key: 'tr', style: { display: 'flex', alignItems: 'center', paddingRight: 40 } }, [
+            h('div', { key: 'track', style: { position: 'relative', flex: 1, minWidth: 0, height: 9, borderRadius: 99, background: 'var(--dsw-alias-border-l1, rgba(128,128,128,.18))' } }, [
+              h('div', { key: 'fill', style: { height: '100%', width: `${pct(cost, splitTotal).toFixed(1)}%`, background: color, borderRadius: 99 } }),
+              h('span', { key: 'p', style: { position: 'absolute', left: `calc(${pct(cost, splitTotal).toFixed(1)}% + 6px)`, top: -3, fontSize: 11, fontWeight: 600, color: C.label2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } }, `${pct(cost, splitTotal).toFixed(0)}%`),
+            ]),
+          ]),
+        ]))),
+      ]),
+
+    // 按天历史（跟随明细的时间窗口）
+    (() => {
+      const historyDays = Object.keys(days)
+        .filter((key) => key >= cutoffDay && key <= today)
+        .sort().reverse()
+        .map((key) => ({ date: key, ...(days[key] ?? {}) }))
+        .filter((d) => (d.cny ?? 0) > 0 || (d.calls ?? 0) > 0)
+        .slice(0, 62);
+      if (!historyDays.length) {
+        return h('div', { key: 'hist', style: { ...S.card, minHeight: 150 } }, [
+          h(SectionTitle, { key: 'h' }, t('historyTitle')),
+          h('div', { key: 'e', style: { fontSize: 12, color: C.label3, padding: '12px 0' } }, t('noDataWindow')),
+        ]);
+      }
+      return h('div', { key: 'hist', style: S.card }, [
+        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 10.5 } }, `${historyDays.length} 天`) }, t('historyTitle')),
+        h('table', { key: 'tb', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 8 } }, [
+          tableHead(['日期', t('cost'), t('hitInput'), t('missInput'), t('output'), t('callsShort')], ['left', 'right', 'right', 'right', 'right', 'right']),
+          h('tbody', { key: 'tb' }, historyDays.map((d) => h('tr', { key: d.date }, [
+            h('td', { key: 'd', style: cell({ color: d.date === today ? C.brand : C.label2, fontWeight: d.date === today ? 700 : 400, whiteSpace: 'nowrap' }) }, d.date),
+            h('td', { key: 'c', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }) }, money(d.cny)),
+            h('td', { key: 'h', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.hit)),
+            h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.miss)),
+            h('td', { key: 'o', style: cell({ ...rightAlign, color: C.label2 }) }, fmt(d.out)),
+            h('td', { key: 'n', style: cell({ ...rightAlign, color: C.label3 }) }, d.calls ?? 0),
+          ]))),
+        ]),
+      ]);
+    })(),
   ]);
 
   /* ---------------- 导出 ---------------- */

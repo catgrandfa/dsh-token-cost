@@ -51,8 +51,8 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, four token stats, hit rate, cost per call, cost composition, peak/off-peak prices, 30-day trend, hourly distribution, live session usage |
-| **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals |
+| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (official / third-party), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend**, hourly distribution, live session usage |
+| **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals, cost composition, **daily history** |
 | **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 
 More:
@@ -74,7 +74,7 @@ More:
 ### GitHub (recommended, pinned)
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.2
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.3
 ```
 
 Use `--profile web` for the web profile.

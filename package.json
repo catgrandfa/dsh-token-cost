@@ -1,6 +1,6 @@
 {
   "name": "dsh-token-cost",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "DSH Token 花费面板（社区插件，非官方）：DeepSeek + GLM（智谱）/ Kimi（月之暗面）按模型计价 · 无预算模式 · 侧栏今日花费 · 自然月/季/年统计 · 峰谷计价 · 明细 · CSV·JSON 导出 · CLI 报表。Community token cost panel for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",

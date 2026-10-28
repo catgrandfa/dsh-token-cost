@@ -359,7 +359,17 @@ function render(node, parent) {
   const { type, props, children } = node;
   // 函数组件在 React 里通过 props.children 拿到子元素；垫片也补上，否则 <SectionTitle>text</SectionTitle> 会丢文案
   if (typeof type === 'function') { render(type({ ...props, children }), parent); return; }
-  const el = document.createElement(type === 'fragment' ? 'div' : type);
+  // SVG 子元素必须用 createElementNS，否则浏览器按 HTMLUnknownElement 处理，折线图不显示
+  const SVG_TAGS = new Set(['svg', 'defs', 'linearGradient', 'stop', 'line', 'polygon', 'polyline', 'circle', 'text', 'g', 'path', 'rect']);
+  const SVG_ATTRS = {
+    stopColor: 'stop-color', stopOpacity: 'stop-opacity', strokeWidth: 'stroke-width', strokeOpacity: 'stroke-opacity',
+    strokeLinejoin: 'stroke-linejoin', strokeLinecap: 'stroke-linecap', vectorEffect: 'vector-effect',
+    textAnchor: 'text-anchor', fillOpacity: 'fill-opacity',
+  };
+  const tag = type === 'fragment' ? 'div' : type;
+  const el = SVG_TAGS.has(tag)
+    ? document.createElementNS('http://www.w3.org/2000/svg', tag)
+    : document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
     if (k === 'children' || v === null || v === undefined) continue;
     if (k === 'style' && typeof v === 'object') {
@@ -373,8 +383,8 @@ function render(node, parent) {
     else if (k === 'className') el.className = v;
     else if (k === 'key' || k === 'title') { if (k === 'title') el.title = v; }
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (typeof v === 'boolean') { if (v) el.setAttribute(k, ''); }
-    else el.setAttribute(k, v);
+    else if (typeof v === 'boolean') { if (v) el.setAttribute(SVG_ATTRS[k] ?? k, ''); }
+    else el.setAttribute(SVG_ATTRS[k] ?? k, v);
   }
   render(children, el);
   parent.appendChild(el);
