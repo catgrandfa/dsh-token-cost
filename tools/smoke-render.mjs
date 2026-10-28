@@ -57,6 +57,8 @@ const NO_BUDGET = {
 };
 let ACTIVE = READY;
 let FORCED_VIEW = null;
+/** 首屏 loading 分支（骨架屏）也必须能渲染：曾因骨架引用未初始化的皮肤对象而崩溃 */
+let FORCED_LOADING = false;
 /** 明细窗口状态在真实面板里由 chip 切换；闸门逐个窗口渲染，覆盖所有分支 */
 let FORCED_DETAIL = null;
 
@@ -74,6 +76,7 @@ const React = {
     if (init === 'today') return [FORCED_DETAIL ?? 'today', () => {}];
     const value = typeof init === 'function' ? init() : init;
     if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
+      if (FORCED_LOADING) return [{ status: 'loading', data: null, error: null, at: 0, refresh() {}, reload() {} }, () => {}];
       return [{
         ...value, status: 'ready', data: ACTIVE, error: null, at: Date.now(),
         refresh() {}, reload() {},
@@ -144,6 +147,13 @@ try {
     }
   }
   FORCED_DETAIL = null;
+  // 首屏 loading（骨架屏）分支
+  FORCED_LOADING = true;
+  FORCED_VIEW = 'overview';
+  visited = 0;
+  walk(panel({ t: (k) => k, useProjection: undefined }));
+  totalVisited += visited;
+  FORCED_LOADING = false;
   // 无预算（只记录花费）分支
   FORCED_VIEW = 'overview';
   ACTIVE = NO_BUDGET;

@@ -908,7 +908,7 @@ function TokenMeterPanel(props) {
     return h('div', { key: 'skeleton', style: { opacity: 0.85 } }, [
       h('div', { key: 'wrap', style: { containerType: 'inline-size' } }, h('div', { key: 'grid', className: 'dsh-tm-cols', style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)', gap: 10, alignItems: 'start' } }, [
         h('div', { key: 'left', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-          skCard('spend', S.panel, 290, [
+          skCard('spend', SKINS.default.panel, 290, [
             h('div', { key: 'l', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.label3 } }, [
               spinner, h('span', { key: 't' }, `${t('firstLoad')} ${waitSec}s`),
             ]),
@@ -917,27 +917,27 @@ function TokenMeterPanel(props) {
             skLine('c', '86%', 10),
             skLine('d', '58%', 10),
           ]),
-          skCard('trend', S.card, 360, [
+          skCard('trend', SKINS.default.card, 360, [
             skLine('h', '32%', 9),
             h('div', { key: 'chart', style: { height: 116, borderRadius: 8, background: C.border1, opacity: 0.3 } }),
             skLine('x', '100%', 8),
             h('div', { key: 'hourly', style: { height: 54, borderRadius: 8, background: C.border1, opacity: 0.3, marginTop: 10 } }),
           ]),
-          skCard('budget', S.panel, 280, [
+          skCard('budget', SKINS.default.panel, 280, [
             skLine('h', '28%', 9), skLine('a', '100%', 8), skLine('b', '66%', 8),
             h('div', { key: 'sep', style: { height: 1, background: C.border1, margin: '6px 0' } }),
             skLine('c', '100%', 8), skLine('d', '52%', 8),
           ]),
         ]),
         h('div', { key: 'right', style: { display: 'grid', gap: 10, alignContent: 'start' } }, [
-          skCard('channels', S.card, 250, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12)]),
-          skCard('stats', S.panel, 335, [
+          skCard('channels', SKINS.default.card, 250, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12)]),
+          skCard('stats', SKINS.default.panel, 335, [
             skLine('h', '36%', 9),
             h('div', { key: 'g', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
               [0, 1, 2, 3].map((i) => h('div', { key: i, style: { height: 54, borderRadius: 10, background: C.border1, opacity: 0.42 } }))),
             skLine('l', '100%', 8),
           ]),
-          skCard('rates', S.panel, 365, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12), skLine('d', '100%', 12), skLine('e', '64%', 9)]),
+          skCard('rates', SKINS.default.panel, 365, [skLine('h', '36%', 9), skLine('a', '100%', 12), skLine('b', '100%', 12), skLine('c', '100%', 12), skLine('d', '100%', 12), skLine('e', '64%', 9)]),
         ]),
       ])),
       h('div', { key: 'hint', style: { marginTop: 8, fontSize: 10.5, color: C.label3 } }, t('firstLoadHint')),

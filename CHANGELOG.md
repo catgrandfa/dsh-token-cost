@@ -4,6 +4,16 @@
 衍生插件（fork），从上游 **0.6.7** 的 MIT 源码出发，重做面板 UI 并新增能力；
 版本号从 `0.1.0` 独立起算，与上游版本号不一一对应。
 
+## 0.3.4 — 修复首屏骨架屏崩溃（面板打不开）
+
+### 修复
+
+- **首屏 loading 直接崩溃**：0.3.3 的骨架屏在 `const S = skinOf(...)` 之前就引用了 `S.panel` / `S.card`，
+  触发 `ReferenceError: Cannot access 'S' before initialization`，面板「打不开」。骨架改用模块级的
+  `SKINS.default` 表面，不再依赖组件内后初始化的 `S`。
+- **渲染闸门补首屏 loading 分支**：`smoke-render` 之前只渲染 ready 状态，所以这个首屏崩溃漏过了；
+  现在强制 `status: 'loading'` 渲染一遍骨架屏。反向验证过：把骨架改回引用 `S` 时闸门会报同样的错误。
+
 ## 0.3.3 — 总览紧凑双栏、折线趋势、历史移入明细
 
 ### 变更
