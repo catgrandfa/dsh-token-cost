@@ -5,7 +5,7 @@
  * 若两档共用同一个带默认值的 schema，高峰档就会被填成空闲价（0.02/1/4），
  * 于是高峰时段的费用被按半价计算 —— 这是本插件的核心数字，必须守住。
  */
-import { PRICE_TIERS, costOf, rateKeyOf } from '../src/core.mjs';
+import { PRICE_TIERS, costOf, rateKeyOf, channelRateOf } from '../src/core.mjs';
 import { loadConfigSchema } from '../lib/index.js';
 
 const Schema = await loadConfigSchema();
@@ -71,5 +71,37 @@ const overridden = Schema({
 if (overridden.offPeak['deepseek-flash'].cacheMiss !== 9) { console.log('FAIL 设置覆盖 DeepSeek 费率未生效'); bad++; }
 if (JSON.stringify(PRICE_TIERS['glm-5.3'].cacheMiss) !== JSON.stringify({ offPeak: 8, peak: 8 })) { console.log('FAIL GLM 内置价被改动'); bad++; }
 
-console.log(bad === 0 ? 'RATES OK（DeepSeek 峰谷价 + GLM/Kimi 固定价）' : `RATES 失败项: ${bad}`);
+/* 自定义渠道单价：命中后按固定价（不分峰谷），provider/模型支持 '*' 兜底，非法配置回落内置价 */
+const channelRates = {
+  'pi-ai': { 'deepseek-v4-pro': { cacheHit: 0.5, cacheMiss: 3, output: 9 } },
+  '*': { '*': { cacheHit: 0, cacheMiss: 2, output: 4 } },
+};
+const allOne = { inputTokens: 1e6, cacheReadTokens: 1e6, outputTokens: 1e6 };
+const channelCase = costOf(allOne, 'deepseek-v4-pro', OFF, PRICE_TIERS, channelRates, 'pi-ai');
+if (!channelCase || Math.abs(channelCase.cny - 12.5) > 1e-9) {
+  console.log(`FAIL 渠道单价未生效：期望 12.5，实际 ${channelCase?.cny}`); bad++;
+} else if (channelCase.tier !== 'channel:pi-ai') {
+  console.log(`FAIL 渠道单价 tier 标记错误：${channelCase.tier}`); bad++;
+}
+const channelPeak = costOf(allOne, 'deepseek-v4-pro', Date.parse('2026-09-21T02:00:00Z'), PRICE_TIERS, channelRates, 'pi-ai');
+if (!channelPeak || Math.abs(channelPeak.cny - 12.5) > 1e-9) {
+  console.log(`FAIL 渠道单价不应分峰谷：${channelPeak?.cny}`); bad++;
+}
+const wildcardCase = costOf(allOne, 'glm-5.3', OFF, PRICE_TIERS, channelRates, 'some-relay');
+if (!wildcardCase || Math.abs(wildcardCase.cny - 6) > 1e-9) {
+  console.log(`FAIL provider/model '*' 兜底未生效：${wildcardCase?.cny}`); bad++;
+}
+const badChannel = costOf(allOne, 'glm-5.3', OFF, PRICE_TIERS, { 'pi-ai': { 'glm-5.3': { cacheHit: 1, cacheMiss: 1 } } }, 'pi-ai');
+if (!badChannel || Math.abs(badChannel.cny - 38) > 1e-9 || badChannel.tier.startsWith('channel:')) {
+  console.log(`FAIL 字段不全的渠道价应回落内置价：${badChannel?.cny} / ${badChannel?.tier}`); bad++;
+}
+if (channelRateOf(null, 'pi-ai', 'glm-5.3') !== null) { console.log('FAIL 空渠道配置应返回 null'); bad++; }
+
+// 设置 schema 必须原样保留自定义渠道单价（动态键不能被 schemastery 吃掉）
+const withChannels = Schema({ channelRates: { 'pi-ai': { '*': { cacheHit: 1, cacheMiss: 2, output: 3 } } } });
+if (!withChannels.channelRates?.['pi-ai']?.['*']) {
+  console.log(`FAIL 设置 schema 丢掉 channelRates：${JSON.stringify(withChannels.channelRates)}`); bad++;
+}
+
+console.log(bad === 0 ? 'RATES OK（DeepSeek 峰谷价 + GLM/Kimi 固定价 + 自定义渠道价）' : `RATES 失败项: ${bad}`);
 process.exit(bad === 0 ? 0 : 1);

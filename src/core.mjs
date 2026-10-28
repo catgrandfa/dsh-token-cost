@@ -149,14 +149,54 @@ export function rateKeyOf(model, rates = PRICE_TIERS) {
 }
 
 /**
+ * 自定义渠道单价：`{ [provider 或 '*']: { [模型名 / 归一化键 / '*']: { cacheHit, cacheMiss, output, cacheWrite? } } }`。
+ * 命中即按固定单价（元 / 百万 token）计费、不分峰谷；字段不全或非数字视为没配，
+ * 回落到按 model id 的官方 / 内置费率。provider / 模型都可用 `*` 兜底。
+ * @param {object|null} channelRates
+ * @param {string|null} provider 日志里的 provider 名
+ * @param {string} model
+ * @returns {{cacheHit:number, cacheMiss:number, output:number, cacheWrite:number, tier:string}|null}
+ */
+export function channelRateOf(channelRates, provider, model) {
+  if (!channelRates || typeof channelRates !== 'object') return null;
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const providers = [...(provider ? [provider] : []), '*'];
+  for (const p of providers) {
+    const table = channelRates[p];
+    if (!table || typeof table !== 'object') continue;
+    // rateKeyOf 自带「原样 → 小写 → 去 provider 前缀」的匹配；没命中再看 '*' 兜底
+    const key = rateKeyOf(model, table) ?? (table['*'] ? '*' : null);
+    if (!key) continue;
+    const r = table[key];
+    if (!r || typeof r !== 'object') continue;
+    const cacheHit = num(r.cacheHit), cacheMiss = num(r.cacheMiss), output = num(r.output);
+    if (cacheHit === null || cacheMiss === null || output === null) continue;
+    return { cacheHit, cacheMiss, output, cacheWrite: num(r.cacheWrite) ?? 0, tier: `channel:${p}` };
+  }
+  return null;
+}
+
+/**
  * @param {{inputTokens?:number, cacheReadTokens?:number, outputTokens?:number, cacheWriteTokens?:number}} usage
  * @param {string} model 模型名
  * @param {number} ms 该次调用的时间戳（epoch ms）
  * @param {object} rates 费率表（可选，形如 PRICE_TIERS）
+ * @param {object|null} channelRates 自定义渠道单价（可选，命中时优先于 rates）
+ * @param {string|null} provider 渠道名（可选，用于渠道单价匹配）
  * @returns {{cny:number, peak:boolean, priced:boolean, tier:string, unit:{hit:number,miss:number,out:number,cacheWrite:number}}|null}
  *          未知模型返回 null：只记 token、不猜价钱（宁可不显示金额，也不给错数字）
  */
-export function costOf(usage, model, ms, rates = PRICE_TIERS) {
+export function costOf(usage, model, ms, rates = PRICE_TIERS, channelRates = null, provider = null) {
+  const channel = channelRateOf(channelRates, provider, model);
+  if (channel) {
+    const cny =
+      ((usage.inputTokens || 0) / 1e6) * channel.cacheMiss +
+      ((usage.cacheReadTokens || 0) / 1e6) * channel.cacheHit +
+      ((usage.outputTokens || 0) / 1e6) * channel.output +
+      ((usage.cacheWriteTokens || 0) / 1e6) * channel.cacheWrite;
+    // 渠道单价是固定价：不区分峰谷，peak 记 false
+    return { cny, peak: false, priced: true, tier: channel.tier, unit: { hit: channel.cacheHit, miss: channel.cacheMiss, out: channel.output, cacheWrite: channel.cacheWrite } };
+  }
   const key = rateKeyOf(model, rates);
   if (!key) return null; // 未知模型：只记 token，不猜价钱
   const tier = rates[key];
@@ -291,7 +331,7 @@ function mergeBucket(dst, src) {
  * @param {object} f 文件描述（workspace/sessionId）
  */
 function contributionOf(records, opts, f) {
-  const { rates, includeOtherProviders, billingProviders } = opts;
+  const { rates, includeOtherProviders, billingProviders, channelRates = null } = opts;
   const days = new Map();
   // 非 DeepSeek 官方 provider 的按天贡献；宿主用它把「官方用量」与「第三方用量」合并展示
   const daysThirdParty = new Map();
@@ -336,7 +376,7 @@ function contributionOf(records, opts, f) {
     calls += 1;
     // 任何 provider 都按 model id 查费率表：DeepSeek / GLM / Kimi 有内置价，
     // 其余第三方模型记 token、不计金额（不强猜）。
-    const cost = costOf(got.usage, model, got.time, rates);
+    const cost = costOf(got.usage, model, got.time, rates, channelRates, provider);
     if (!cost) unpriced += 1;
     const tokens = (got.usage.inputTokens || 0) + (got.usage.cacheReadTokens || 0) + (got.usage.outputTokens || 0);
 
@@ -393,7 +433,7 @@ function generationOf(name) {
  *        未变动的日志文件会被直接复用（filesReused 报告命中数），已变动的重算。
  *        sinceMs > 0 时只统计「最后一次写入在 sinceMs 之后」的会话（见 filesOutsideWindow）。
  */
-export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProviders = false, billingProviders = OFFICIAL_PROVIDERS, limit = Infinity, budgetMs = 0, cache = null, sinceMs = 0 } = {}) {
+export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProviders = false, billingProviders = OFFICIAL_PROVIDERS, channelRates = null, limit = Infinity, budgetMs = 0, cache = null, sinceMs = 0 } = {}) {
   const files = [];
   const listEntries = (p) => {
     try {
@@ -456,8 +496,8 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
   let newestMtime = 0;
 
   // 缓存的键里必须带「计价口径」签名：费率/口径变了，旧的贡献就不能再用（否则改了设置不生效）。
-  const signature = JSON.stringify([rates, includeOtherProviders, billingProviders]);
-  const contributionOpts = { rates, includeOtherProviders, billingProviders };
+  const signature = JSON.stringify([rates, includeOtherProviders, billingProviders, channelRates]);
+  const contributionOpts = { rates, includeOtherProviders, billingProviders, channelRates };
 
   const merge = (c) => {
     for (const [k, v] of c.days) {

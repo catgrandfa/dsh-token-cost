@@ -69,7 +69,7 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 ### 方式一：GitHub 直装（推荐，固定版本）
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.1
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.2
 ```
 
 `web` profile 同理，把 `--profile desktop` 换成 `--profile web`。
@@ -140,6 +140,28 @@ provider 名不参与定价：
 - 未内置的第三方模型：只记 token、不计金额（`unpricedCalls` 会显示数量）
 - 模型名大小写、`provider/model` 前缀写法会自动归一化
 - 第三方**余额 / 套餐额度**暂未接入，余额卡仍只查 DeepSeek
+
+### 自定义渠道单价（可选）
+
+同一个模型可能走不同渠道、单价不同（例如 DeepSeek 模型经由第三方中转）。可以给「渠道 × 模型」
+单独定价，命中后按固定价估算（元/百万 token，**不分峰谷**）：
+
+```json
+{
+  "channelRates": {
+    "<provider 名>": {
+      "<模型名或归一化键或 *>": { "cacheHit": 1, "cacheMiss": 2, "output": 3, "cacheWrite": 0 }
+    },
+    "*": { "*": { "cacheHit": 0.5, "cacheMiss": 1, "output": 2 } }
+  }
+}
+```
+
+- provider、模型都支持 `*` 兜底；命中渠道价后优先于内置 / 官方价
+- 字段不全（缺 `cacheHit` / `cacheMiss` / `output`）视为未配置，自动回落内置费率
+- 写在 profile 的配置 patch 里（`$DSH_HOME/profiles/<profile>/cordis.patch.yml`，给 `token-cost`
+  行加 `config.channelRates`），重启 DSH 生效
+- 面板概览的「渠道拆分」会把 **官方渠道** 与各 **第三方渠道** 的今日 / 近 30 天花费分开显示
 
 费率、每日预算、月度预算、告警阈值、刷新间隔、是否显示余额，都可以在
 **设置 → 插件 → token-cost** 里改；改完立刻生效。

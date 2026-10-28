@@ -15,8 +15,10 @@ const READY = {
   today: '2026-10-15', meterSource: 'official', peakNow: false, partialScan: false,
   billingUrl: 'https://platform.deepseek.com/usage', sessionsRoot: '/tmp/dsh-sessions',
   filesScanned: 3, filesReused: 1, filesOutsideWindow: 2, elapsedMs: 12, generatedAt: Date.now(),
+  officialProviders: ['deepseek-official', 'deepseek-account'],
   config: {
     dailyBudget: 50, alertAtPercent: 80, showBalance: true, lowBalanceAlert: 20, refreshSeconds: 60,
+    channelRates: { 'pi-ai': { 'glm-5.3': { cacheHit: 2, cacheMiss: 8, output: 28 } } },
     rates: {
       peak: { 'deepseek-flash': RATES, 'deepseek-v4-pro': RATES },
       offPeak: { 'deepseek-flash': RATES, 'deepseek-v4-pro': RATES },
@@ -28,6 +30,18 @@ const READY = {
       byHour: new Array(24).fill(1e6), peakCalls: 0,
       tier: { peak: { cny: 0, calls: 0 }, offPeak: { cny: 2.01, calls: 187 } },
     },
+  },
+  // 第三方渠道贡献（用于「渠道拆分」卡与明细窗口内的 provider 汇总）
+  daysThirdParty: {
+    '2026-10-15': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4, byHour: new Array(24).fill(0) },
+  },
+  providers: {
+    'deepseek-official': { calls: 187, tokens: 41.7e6, cny: 2.01 },
+    'pi-ai': { calls: 5, tokens: 1.2e6, cny: 0.4 },
+  },
+  dayModels: {
+    '2026-10-15|deepseek-official | deepseek-flash': { hit: 41e6, miss: 2.5e5, out: 2.3e5, calls: 187, cny: 2.01 },
+    '2026-10-15|pi-ai | glm-5.3': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4 },
   },
   official: {
     ok: true, auth: 'account', requests: 187, cny: 2.01, yesterdayCny: 9.6,

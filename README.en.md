@@ -74,7 +74,7 @@ More:
 ### GitHub (recommended, pinned)
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.1
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.2
 ```
 
 Use `--profile web` for the web profile.
@@ -145,6 +145,29 @@ Provider routes added through pi-ai or similar adapters can have arbitrary names
 - Models without a built-in rate are counted as tokens only (`unpricedCalls`)
 - Model-name case and `provider/model` prefixes are normalized
 - Third-party **balance / plan quota** is not integrated yet; the balance card still queries DeepSeek only
+
+### Custom channel rates (optional)
+
+The same model can be served through different channels with different prices (for example DeepSeek
+models behind a third-party relay). You can price a **channel × model** explicitly; a hit is billed at
+that flat rate (CNY per 1M tokens, **no peak/off-peak split**):
+
+```json
+{
+  "channelRates": {
+    "<provider name>": {
+      "<model name / normalized key / *>": { "cacheHit": 1, "cacheMiss": 2, "output": 3, "cacheWrite": 0 }
+    },
+    "*": { "*": { "cacheHit": 0.5, "cacheMiss": 1, "output": 2 } }
+  }
+}
+```
+
+- `*` works as a fallback for both provider and model; a channel rate wins over built-in / official rates
+- Entries missing `cacheHit` / `cacheMiss` / `output` are ignored and fall back to built-in rates
+- Put it in the profile's config patch (`$DSH_HOME/profiles/<profile>/cordis.patch.yml`, under the
+  `token-cost` row as `config.channelRates`) and restart DSH
+- The overview's **Channel split** card shows official vs third-party spend for today / last 30 days
 
 All rates, budgets, alert thresholds and refresh intervals are editable under
 **Settings → Plugins → token-cost**.

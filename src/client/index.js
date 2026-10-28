@@ -635,6 +635,14 @@ Object.assign(zh, {
   'offPeakHint': '空闲档 = 高峰价的一半',
   'detailTotals': '窗口合计',
   'mixedShort': '官方 + 第三方',
+  'channelSplit': '渠道拆分',
+  'channelCol': '渠道',
+  'officialChannel': '官方渠道',
+  'thirdChannel': '第三方渠道',
+  'channelToday': '今日',
+  'channel30d': '近 30 天',
+  'channelNote': '官方渠道 = 官方用量 / 官方价；第三方渠道 = 本地日志 + 自定义单价（可配置，未配置时按内置模型价）。',
+  'customRateTag': '自定义价',
   'thirdPartyRateNote': 'GLM / Kimi 等第三方模型按明细里的固定单价计费，不适用 DeepSeek 峰谷价；官方峰谷价表只用于 DeepSeek token。',
   'budgetOff': '仅记录花费（未设每日预算）',
   'budgetOffHint': '预算为 0 时不告警、不显示进度条，只记录花费；点这里设置预算',
@@ -709,6 +717,14 @@ Object.assign(en, {
   'offPeakHint': 'Off-peak = half of the peak price',
   'detailTotals': 'Window total',
   'mixedShort': 'official + 3rd-party',
+  'channelSplit': 'Channel split',
+  'channelCol': 'Channel',
+  'officialChannel': 'Official channel',
+  'thirdChannel': 'Third-party channel',
+  'channelToday': 'Today',
+  'channel30d': 'Last 30 days',
+  'channelNote': 'Official = official usage / official rates; third-party = local logs with custom rates (built-in model rates when unset).',
+  'customRateTag': 'custom rate',
   'thirdPartyRateNote': 'GLM / Kimi and other third-party models use their own flat per-model rates in the breakdown; the peak/off-peak table applies to DeepSeek tokens only.',
   'budgetOff': 'Record only (no daily budget)',
   'budgetOffHint': 'With a budget of 0 the panel records spend without alerts or progress bars; click to set one',
@@ -1094,8 +1110,81 @@ function TokenMeterPanel(props) {
     : sessionRows;
   const maxSessionCny = filteredSessions.length ? Math.max(...filteredSessions.map((s) => s.cny)) : 1;
 
-  const providerRows = Object.entries(data.providers ?? {})
-    .sort(([, a], [, b]) => (b.cny ?? 0) - (a.cny ?? 0));
+  // 渠道拆分：官方渠道合并成一行，第三方按 provider 分行；窗口用今日 / 近 30 天
+  const officialProviderSet = new Set(data.officialProviders ?? ['deepseek-official', 'deepseek-account']);
+  const channelStats = (() => {
+    const cutoff30 = dayKeyOf(Date.now() - 29 * 86400000);
+    const todayKey = data.today;
+    const rows = new Map();
+    const touch = (rowKey, isOfficial) => {
+      if (!rows.has(rowKey)) rows.set(rowKey, { key: rowKey, official: isOfficial, provider: isOfficial ? '' : rowKey, today: { cny: 0, tokens: 0 }, d30: { cny: 0, tokens: 0 } });
+      return rows.get(rowKey);
+    };
+    // dayModels 的键是 `${day}|${provider} | ${model}`，取出 provider 并按天归集
+    for (const [key, bucket] of Object.entries(data.dayModels ?? {})) {
+      const bar = key.indexOf('|');
+      if (bar < 0) continue;
+      const day = key.slice(0, bar);
+      if (day < cutoff30) continue;
+      const rest = key.slice(bar + 1);
+      const sep = rest.indexOf(' | ');
+      const provider = sep >= 0 ? rest.slice(0, sep) : rest;
+      const isOfficial = officialProviderSet.has(provider);
+      const row = touch(isOfficial ? '__official' : provider, isOfficial);
+      const cny = Number(bucket.cny ?? 0);
+      const tokens = (bucket.hit ?? 0) + (bucket.miss ?? 0) + (bucket.out ?? 0);
+      row.d30.cny += cny;
+      row.d30.tokens += tokens;
+      if (day === todayKey) {
+        row.today.cny += cny;
+        row.today.tokens += tokens;
+      }
+    }
+    if (!rows.size) {
+      // 老数据没有 dayModels：用 days / daysThirdParty 兜底，拆官方 / 第三方两行
+      const tp = data.daysThirdParty ?? {};
+      const pick = (filter) => Object.entries(days)
+        .filter(([day]) => filter(day))
+        .reduce((acc, [day]) => ({
+          cny: acc.cny + Number(days[day].cny ?? 0) - Number(tp[day]?.cny ?? 0),
+          tpCny: acc.tpCny + Number(tp[day]?.cny ?? 0),
+          tokens: acc.tokens + (days[day].hit ?? 0) + (days[day].miss ?? 0) + (days[day].out ?? 0),
+          tpTokens: acc.tpTokens + (tp[day]?.hit ?? 0) + (tp[day]?.miss ?? 0) + (tp[day]?.out ?? 0),
+        }), { cny: 0, tpCny: 0, tokens: 0, tpTokens: 0 });
+      const todaySum = pick((day) => day === todayKey);
+      const monthSum = pick((day) => day >= cutoff30);
+      rows.set('__official', { key: '__official', official: true, provider: '', today: { cny: todaySum.cny, tokens: todaySum.tokens }, d30: { cny: monthSum.cny, tokens: monthSum.tokens } });
+      if (monthSum.tpCny > 0 || todaySum.tpCny > 0) {
+        rows.set('__third', { key: '__third', official: false, provider: '', today: { cny: todaySum.tpCny, tokens: todaySum.tpTokens }, d30: { cny: monthSum.tpCny, tokens: monthSum.tpTokens } });
+      }
+    }
+    return [...rows.values()].sort((a, b) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || b.d30.cny - a.d30.cny);
+  })();
+  const channelRateKeys = data.config?.channelRates && typeof data.config.channelRates === 'object'
+    ? Object.keys(data.config.channelRates) : [];
+
+  /** 明细的 provider 卡片跟着明细窗口走；没有 dayModels 的旧数据退回全历史 */
+  const providerRows = (() => {
+    const src = data.dayModels ?? {};
+    if (Object.keys(src).length) {
+      const acc = new Map();
+      for (const [key, bucket] of Object.entries(src)) {
+        const bar = key.indexOf('|');
+        if (bar < 0) continue;
+        if (key.slice(0, bar) < cutoffDay) continue;
+        const rest = key.slice(bar + 1);
+        const sep = rest.indexOf(' | ');
+        const provider = sep >= 0 ? rest.slice(0, sep) : rest;
+        const cur = acc.get(provider) ?? { calls: 0, tokens: 0, cny: 0 };
+        cur.calls += bucket.calls ?? 0;
+        cur.tokens += (bucket.hit ?? 0) + (bucket.miss ?? 0) + (bucket.out ?? 0);
+        cur.cny += Number(bucket.cny ?? 0);
+        acc.set(provider, cur);
+      }
+      return [...acc.entries()].sort((a, b) => b[1].cny - a[1].cny);
+    }
+    return Object.entries(data.providers ?? {}).sort(([, a], [, b]) => (b.cny ?? 0) - (a.cny ?? 0));
+  })();
 
   const plugin = data.plugin ?? {};
   const update = plugin.update;
@@ -1418,6 +1507,26 @@ function TokenMeterPanel(props) {
         h('div', { key: 'note', style: { fontSize: 10.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
         hasThirdParty ? h('div', { key: 'third', style: { fontSize: 10.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
       ]),
+    ]),
+
+    // 渠道拆分：官方渠道 vs 第三方渠道（今日 / 近 30 天）
+    h('div', { key: 'channels', style: { ...S.card, marginTop: 12 } }, [
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
+      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 } }, [
+        tableHead([t('channelCol'), t('channelToday'), t('channel30d')]),
+        h('tbody', { key: 'tb' }, channelStats.map((row) => h('tr', { key: row.key }, [
+          h('td', { key: 'n', style: cell({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+            row.official
+              ? h('span', { key: 'tag', style: { fontSize: 10, padding: '1px 5px', borderRadius: 5, marginRight: 6, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialChannel'))
+              : (row.provider || t('thirdChannel')),
+            !row.official && row.provider && channelRateKeys.includes(row.provider)
+              ? h('span', { key: 'r', style: { fontSize: 10, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+          ]),
+          h('td', { key: 't', style: cell({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
+          h('td', { key: 'm', style: cell({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
+        ]))),
+      ])),
+      h('div', { key: 'note', style: { fontSize: 10.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
     ]),
 
     // 趋势
