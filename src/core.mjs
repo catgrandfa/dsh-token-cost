@@ -10,15 +10,46 @@ import { readSessionRecords } from './zstd.mjs';
 
 /* ------------------------------------------------------------------ *
  * 费率表（CNY / 百万 token）
- * 来源：https://api-docs.deepseek.com/zh-cn/quick_start/pricing （核实于 2026-09-19）
- * 规则要点：
+ *
+ * DeepSeek：https://api-docs.deepseek.com/zh-cn/quick_start/pricing（核实于 2026-09-19）
  *   - 现实售模型只有 deepseek-flash 与 deepseek-v4-pro（deepseek-chat / reasoner 已下线）
  *   - 分「高峰 / 空闲」两档，空闲价 = 高峰价的一半
  *   - 高峰 = 北京时间周一至周五 9:00-12:00 与 14:00-18:00（法定节假日除外，本工具不识别节假日）
- *   - 缓存命中输入价只有未命中的 1/50 ~ 1/30，是本工具最值得显示的省钱项
+ *
+ * 第三方（固定单价，不区分峰谷）：
+ *   - GLM / 智谱 BigModel：https://open.bigmodel.cn/pricing（核实于 2026-10-28）
+ *   - Kimi / 月之暗面：https://platform.kimi.com/docs/pricing/chat（核实于 2026-10-28）
+ *   - 这些路由通常由 pi-ai 多 provider 适配器接入，日志里的 provider 可能是任意路由名；
+ *     因此按 **model id** 计价，provider 名不参与定价。
+ *   - 长上下文阶梯价 / 限时折扣 / 套餐价无法从聚合 token 还原，内置值取标准档基础价；
+ *     需要精确账单时请以官方页面为准。
  * ------------------------------------------------------------------ */
 export const PRICING_SOURCE = 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing';
 export const PRICING_FETCHED_AT = '2026-09-19';
+/** 第三方国产模型的官方价格来源（面板/文档用） */
+export const THIRD_PARTY_PRICING = [
+  {
+    vendor: 'GLM / 智谱',
+    source: 'https://open.bigmodel.cn/pricing',
+    fetchedAt: '2026-10-28',
+    note: '固定单价；长上下文阶梯价取基础档，限时折扣不内置',
+  },
+  {
+    vendor: 'Kimi / 月之暗面',
+    source: 'https://platform.kimi.com/docs/pricing/chat',
+    fetchedAt: '2026-10-28',
+    note: '固定单价；K3 系列缓存写入按 5min TTL 价计',
+  },
+];
+
+/** 固定单价（不区分峰谷）的费率三元组 */
+const flat = (cacheHit, cacheMiss, output, cacheWrite = 0) => ({
+  cacheHit: { offPeak: cacheHit, peak: cacheHit },
+  cacheMiss: { offPeak: cacheMiss, peak: cacheMiss },
+  output: { offPeak: output, peak: output },
+  cacheWrite: { offPeak: cacheWrite, peak: cacheWrite },
+});
+
 export const PRICE_TIERS = {
   'deepseek-flash': {
     label: 'deepseek-flash',
@@ -45,14 +76,32 @@ export const PRICE_TIERS = {
     cacheMiss: { offPeak: 1, peak: 2 },
     output: { offPeak: 4, peak: 8 },
   },
+
+  /* GLM / 智谱（元/百万 token，标准档） */
+  'glm-5.3': { label: 'GLM-5.3（智谱）', ...flat(2, 8, 28) },
+  'glm-5.2': { label: 'GLM-5.2（智谱）', ...flat(2, 8, 28) },
+  'glm-5.1': { label: 'GLM-5.1（智谱，基础档）', ...flat(1.3, 6, 24) },
+  'glm-5.3-flash': { label: 'GLM-5.3-Flash（智谱）', ...flat(0.23, 0.8, 2.8) },
+  'glm-5.3-flashx': { label: 'GLM-5.3-FlashX（智谱）', ...flat(0.57, 2, 7) },
+  'glm-4.7-flash': { label: 'GLM-4.7-Flash（智谱，免费）', ...flat(0, 0, 0) },
+
+  /* Kimi / 月之暗面（元/百万 token；cacheWrite 为 5min TTL 价） */
+  'kimi-k3.1-pro': { label: 'Kimi K3.1 Pro', ...flat(1.3, 13, 68, 13) },
+  'kimi-k3.1-pro-highspeed': { label: 'Kimi K3.1 Pro 高速版', ...flat(1.3, 26, 136, 26) },
+  'kimi-k3': { label: 'Kimi K3', ...flat(2, 20, 100, 20) },
+  'kimi-k2.7-code': { label: 'Kimi K2.7 Code', ...flat(1.3, 6.5, 27) },
+  'kimi-k2.7-code-highspeed': { label: 'Kimi K2.7 Code 高速版', ...flat(2.6, 13, 54) },
+  'kimi-k2.6': { label: 'Kimi K2.6', ...flat(1.1, 6.5, 27) },
 };
 /**
- * 计费口径：只有 DeepSeek 官方路由的调用才折算 CNY，其他 provider（第三方中转、
- * 自建端点等）只记 token、不给金额。
+ * DeepSeek 官方 provider 路由（用于把官方用量接口与本地第三方用量分开合并）。
  *   - deepseek-official：API Key 路由（@deepseek-ai/dsh-llm-deepseek-api-key 注册）
  *   - deepseek-account ：桌面端 DeepSeek 账号登录路由（@deepseek-ai/dsh-llm-deepseek-account）
  * 两个 id 必须与基座实际注册的 provider 名一致：只写死 official 时，用桌面端
  * 账号登录的会话（本地日志里 source.provider === 'deepseek-account'）一条都统计不到。
+ *
+ * 其他 provider（pi-ai 路由、第三方中转、自建端点）在 includeOtherProviders=true 时
+ * 一并统计；有内置费率的模型（GLM / Kimi / DeepSeek）按 model id 计价，未知模型只记 token。
  */
 export const OFFICIAL_PROVIDERS = ['deepseek-official', 'deepseek-account'];
 /** @deprecated 改用 OFFICIAL_PROVIDERS；仅保留旧名，避免破坏外部导入。 */
@@ -80,24 +129,48 @@ export function isPeakHour(ms) {
  * 单次调用的花费
  * ------------------------------------------------------------------ */
 /**
+ * 模型名归一化：日志里的 model 可能带大小写或 provider 前缀（如 `zhipu/glm-5.3`、
+ * `moonshot:kimi-k3`）。按「原样 → 小写 → 去掉前缀后的最后一段」依次匹配费率表。
+ * @param {string} model
+ * @param {object} rates
+ * @returns {string|null} 命中的费率键
+ */
+export function rateKeyOf(model, rates = PRICE_TIERS) {
+  if (!model) return null;
+  const raw = String(model).trim();
+  if (rates[raw]) return raw;
+  const lower = raw.toLowerCase();
+  if (rates[lower]) return lower;
+  for (const separator of ['/', ':']) {
+    const at = lower.lastIndexOf(separator);
+    if (at >= 0 && rates[lower.slice(at + 1)]) return lower.slice(at + 1);
+  }
+  return null;
+}
+
+/**
  * @param {{inputTokens?:number, cacheReadTokens?:number, outputTokens?:number, cacheWriteTokens?:number}} usage
  * @param {string} model 模型名
  * @param {number} ms 该次调用的时间戳（epoch ms）
  * @param {object} rates 费率表（可选，形如 PRICE_TIERS）
- * @returns {{cny:number, peak:boolean, priced:boolean, tier:string, unit:{hit:number,miss:number,out:number}}|null}
+ * @returns {{cny:number, peak:boolean, priced:boolean, tier:string, unit:{hit:number,miss:number,out:number,cacheWrite:number}}|null}
  *          未知模型返回 null：只记 token、不猜价钱（宁可不显示金额，也不给错数字）
  */
 export function costOf(usage, model, ms, rates = PRICE_TIERS) {
-  const tier = rates[model];
-  if (!tier) return null; // 未知模型：只记 token，不猜价钱
+  const key = rateKeyOf(model, rates);
+  if (!key) return null; // 未知模型：只记 token，不猜价钱
+  const tier = rates[key];
   const peak = isPeakHour(ms);
   const pick = (p) => (typeof p === 'number' ? p : peak ? p.peak : p.offPeak);
   const hit = pick(tier.cacheHit), miss = pick(tier.cacheMiss), out = pick(tier.output);
+  // 缓存写入：DeepSeek 不计费；Kimi K3 按 5min TTL 单独计费；GLM 缓存存储免费
+  const cacheWrite = tier.cacheWrite ? pick(tier.cacheWrite) : 0;
   const cny =
     ((usage.inputTokens || 0) / 1e6) * miss +
     ((usage.cacheReadTokens || 0) / 1e6) * hit +
-    ((usage.outputTokens || 0) / 1e6) * out;
-  return { cny, peak, priced: true, tier: model, unit: { hit, miss, out } };
+    ((usage.outputTokens || 0) / 1e6) * out +
+    ((usage.cacheWriteTokens || 0) / 1e6) * cacheWrite;
+  return { cny, peak, priced: true, tier: key, unit: { hit, miss, out, cacheWrite } };
 }
 
 /* ------------------------------------------------------------------ *
@@ -129,6 +202,8 @@ function blankBucket() {
   return {
     miss: 0, hit: 0, out: 0, cacheWrite: 0, reasoning: 0, calls: 0,
     cny: 0, peakCalls: 0, unpricedCalls: 0,
+    // 按 token 类型拆分的实际花费（跨 provider 精确：每类 token × 该模型当时的单价）
+    costByType: { hit: 0, miss: 0, out: 0, cacheWrite: 0 },
     // 峰/谷分档累计（同一批 token 在高峰、空闲两档分别花了多少）
     tier: {
       peak: { hit: 0, miss: 0, out: 0, cny: 0, calls: 0 },
@@ -151,6 +226,10 @@ function accumulate(bucket, usage, model, ms, cost) {
   if (bucket.lastTime == null || ms > bucket.lastTime) bucket.lastTime = ms;
   if (cost) {
     bucket.cny += cost.cny;
+    bucket.costByType.hit += ((usage.cacheReadTokens || 0) / 1e6) * cost.unit.hit;
+    bucket.costByType.miss += ((usage.inputTokens || 0) / 1e6) * cost.unit.miss;
+    bucket.costByType.out += ((usage.outputTokens || 0) / 1e6) * cost.unit.out;
+    bucket.costByType.cacheWrite += ((usage.cacheWriteTokens || 0) / 1e6) * (cost.unit.cacheWrite || 0);
     if (cost.peak) bucket.peakCalls += 1;
     // 按该次调用所处的档位分别记账（峰/谷各一份），后面面板要分开显示再汇总
     const t = cost.peak ? bucket.tier.peak : bucket.tier.offPeak;
@@ -175,6 +254,10 @@ function packBucket(b) {
   return {
     miss: b.miss, hit: b.hit, out: b.out, cacheWrite: b.cacheWrite, reasoning: b.reasoning,
     calls: b.calls, cny: Number(b.cny.toFixed(6)), peakCalls: b.peakCalls, unpricedCalls: b.unpricedCalls,
+    costByType: {
+      hit: Number(b.costByType.hit.toFixed(6)), miss: Number(b.costByType.miss.toFixed(6)),
+      out: Number(b.costByType.out.toFixed(6)), cacheWrite: Number(b.costByType.cacheWrite.toFixed(6)),
+    },
     firstTime: b.firstTime, lastTime: b.lastTime,
     hitRate: totalIn > 0 ? Number(((100 * b.hit) / totalIn).toFixed(1)) : null,
     byHour: b.byHour,
@@ -189,6 +272,7 @@ function mergeBucket(dst, src) {
   dst.cacheWrite += src.cacheWrite; dst.reasoning += src.reasoning;
   dst.calls += src.calls; dst.cny += src.cny;
   dst.peakCalls += src.peakCalls; dst.unpricedCalls += src.unpricedCalls;
+  for (const key of ['hit', 'miss', 'out', 'cacheWrite']) dst.costByType[key] += src.costByType?.[key] ?? 0;
   if (src.firstTime != null && (dst.firstTime == null || src.firstTime < dst.firstTime)) dst.firstTime = src.firstTime;
   if (src.lastTime != null && (dst.lastTime == null || src.lastTime > dst.lastTime)) dst.lastTime = src.lastTime;
   for (let i = 0; i < 24; i += 1) dst.byHour[i] += src.byHour[i];
@@ -209,6 +293,8 @@ function mergeBucket(dst, src) {
 function contributionOf(records, opts, f) {
   const { rates, includeOtherProviders, billingProviders } = opts;
   const days = new Map();
+  // 非 DeepSeek 官方 provider 的按天贡献；宿主用它把「官方用量」与「第三方用量」合并展示
+  const daysThirdParty = new Map();
   const models = new Map();
   // 按「日期 | provider | model」再分一层：面板/导出要按时间窗口看模型明细，
   // 只保留全局 models 的话选了 7 天也只能看到全历史。这一层复用同一个 bucket，聚合逻辑不变。
@@ -244,18 +330,24 @@ function contributionOf(records, opts, f) {
     if (!got) continue;
     const provider = got.source?.provider ?? 'unknown';
     const model = got.source?.model ?? 'unknown';
-    const billed = billingProviders.includes(provider);
-    if (!billed && !includeOtherProviders) continue;
+    const official = billingProviders.includes(provider);
+    if (!official && !includeOtherProviders) continue;
 
     calls += 1;
-    const cost = billed ? costOf(got.usage, model, got.time, rates) : null;
-    if (billed && !cost) unpriced += 1;
+    // 任何 provider 都按 model id 查费率表：DeepSeek / GLM / Kimi 有内置价，
+    // 其余第三方模型记 token、不计金额（不强猜）。
+    const cost = costOf(got.usage, model, got.time, rates);
+    if (!cost) unpriced += 1;
     const tokens = (got.usage.inputTokens || 0) + (got.usage.cacheReadTokens || 0) + (got.usage.outputTokens || 0);
 
     const dk = dayKeyOf(got.time);
     if (!days.has(dk)) days.set(dk, blankBucket());
     accumulate(days.get(dk), got.usage, model, got.time, cost);
     accumulate(bucket, got.usage, model, got.time, cost);
+    if (!official) {
+      if (!daysThirdParty.has(dk)) daysThirdParty.set(dk, blankBucket());
+      accumulate(daysThirdParty.get(dk), got.usage, model, got.time, cost);
+    }
 
     const mk = `${provider} | ${model}`;
     if (!models.has(mk)) models.set(mk, blankBucket());
@@ -270,7 +362,7 @@ function contributionOf(records, opts, f) {
     providers.set(provider, pt);
   }
   bucket.isSubagent = bucket.delegationDepth > 0;
-  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, models, dayModels, providers, calls, unpriced };
+  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, daysThirdParty, models, dayModels, providers, calls, unpriced };
 }
 
 /**
@@ -355,6 +447,7 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
   const skipped = all.slice(kept.length);
 
   const days = new Map();
+  const daysThirdParty = new Map();
   const sessions = new Map();
   const models = new Map();
   const dayModels = new Map();
@@ -370,6 +463,10 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     for (const [k, v] of c.days) {
       if (!days.has(k)) days.set(k, blankBucket());
       mergeBucket(days.get(k), v);
+    }
+    for (const [k, v] of c.daysThirdParty ?? []) {
+      if (!daysThirdParty.has(k)) daysThirdParty.set(k, blankBucket());
+      mergeBucket(daysThirdParty.get(k), v);
     }
     for (const [k, v] of c.models) {
       if (!models.has(k)) models.set(k, blankBucket());
@@ -433,6 +530,8 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     partialScan,
     calls, unpricedCalls: unpriced,
     days: Object.fromEntries([...days.entries()].map(([k, v]) => [k, packBucket(v)])),
+    // 非 DeepSeek 官方 provider 的按天贡献（宿主与官方用量合并时用）
+    daysThirdParty: Object.fromEntries([...daysThirdParty.entries()].map(([k, v]) => [k, packBucket(v)])),
     sessions: Object.fromEntries([...sessions.entries()].map(([k, v]) => {
       const p = packBucket(v);
       return [k, {

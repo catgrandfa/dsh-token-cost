@@ -98,6 +98,12 @@ function demoData() {
     for (let hour = 0; hour < 24; hour += 1) {
       entry.byHour[hour] = i === 0 ? Math.max(0, Math.round((hit + miss + out) / 24 * (0.2 + Math.abs(Math.sin((hour - 8) / 2.4))))) : 0;
     }
+    entry.costByType = {
+      hit: Number(((hit / 1e6) * 0.02).toFixed(6)),
+      miss: Number(((miss / 1e6) * 1).toFixed(6)),
+      out: Number(((out / 1e6) * 4).toFixed(6)),
+      cacheWrite: 0,
+    };
     days[key] = entry;
     for (const [model, share] of [['deepseek-flash', 0.82], ['deepseek-v4-pro', 0.18]]) {
       const h = Math.round(hit * share), m = Math.round(miss * share), o = Math.round(out * share);
@@ -147,6 +153,44 @@ function demoData() {
     if (!value) continue;
     officialDays[key] = { cny: value.cny, hit: value.hit, miss: value.miss, out: value.out, requests: value.calls };
   }
+  // 第三方（pi-ai → GLM / Kimi）：官方用量接口看不到这部分，宿主会把它与官方天数合并
+  const thirdParty = { calls: 0, tokens: 0, cny: 0 };
+  const thirdModels = [
+    { model: 'glm-5.3', hit: 1_200_000, miss: 180_000, out: 22_000, rates: { hit: 2, miss: 8, out: 28 } },
+    { model: 'kimi-k3.1-pro', hit: 620_000, miss: 90_000, out: 12_000, rates: { hit: 1.3, miss: 13, out: 68 } },
+  ];
+  for (const item of thirdModels) {
+    const modelKey = `pi-ai | ${item.model}`;
+    const modelCny = (item.hit / 1e6) * item.rates.hit + (item.miss / 1e6) * item.rates.miss + (item.out / 1e6) * item.rates.out;
+    for (let i = 0; i < 5; i += 1) {
+      const key = keyOf(now - i * 86400000);
+      const entry = days[key];
+      const scale = i === 0 ? 1 : 0.45 / (i + 1);
+      const hit = Math.round(item.hit * scale), miss = Math.round(item.miss * scale), out = Math.round(item.out * scale);
+      const cny = Number(((hit / 1e6) * item.rates.hit + (miss / 1e6) * item.rates.miss + (out / 1e6) * item.rates.out).toFixed(6));
+      entry.hit += hit; entry.miss += miss; entry.out += out; entry.cny = Number((entry.cny + cny).toFixed(6));
+      entry.calls += 3;
+      entry.costByType.hit = Number((entry.costByType.hit + (hit / 1e6) * item.rates.hit).toFixed(6));
+      entry.costByType.miss = Number((entry.costByType.miss + (miss / 1e6) * item.rates.miss).toFixed(6));
+      entry.costByType.out = Number((entry.costByType.out + (out / 1e6) * item.rates.out).toFixed(6));
+      dayModels[`${key}|${modelKey}`] = {
+        miss, hit, out, calls: 3, cny,
+        hitRate: Number(((100 * hit) / (hit + miss)).toFixed(1)),
+      };
+      thirdParty.calls += 3; thirdParty.tokens += hit + miss + out; thirdParty.cny += cny;
+    }
+    models[modelKey] = {
+      ...blank(), hit: item.hit, miss: item.miss, out: item.out, calls: 15,
+      cny: Number(modelCny.toFixed(6)),
+      hitRate: Number(((100 * item.hit) / (item.hit + item.miss)).toFixed(1)),
+      tier: undefined,
+    };
+  }
+  thirdParty.cny = Number(thirdParty.cny.toFixed(6));
+  const deepseekCalls = Object.values(days).reduce((sum, day) => sum + day.calls, 0) - thirdParty.calls;
+  const deepseekTokens = Object.values(days).reduce((sum, day) => sum + day.hit + day.miss + day.out, 0) - thirdParty.tokens;
+  const deepseekCny = Number((Object.values(days).reduce((sum, day) => sum + day.cny, 0) - thirdParty.cny).toFixed(6));
+
   return {
     summary: {
       generatedAt: now,
@@ -160,11 +204,8 @@ function demoData() {
       models,
       dayModels,
       providers: {
-        'deepseek-account': {
-          calls: Object.values(days).reduce((sum, day) => sum + day.calls, 0),
-          tokens: Object.values(days).reduce((sum, day) => sum + day.hit + day.miss + day.out, 0),
-          cny: Number(Object.values(days).reduce((sum, day) => sum + day.cny, 0).toFixed(6)),
-        },
+        'deepseek-account': { calls: deepseekCalls, tokens: deepseekTokens, cny: deepseekCny },
+        'pi-ai': { calls: thirdParty.calls, tokens: thirdParty.tokens, cny: thirdParty.cny },
       },
       today: todayKey,
       peakNow: true,
@@ -172,20 +213,25 @@ function demoData() {
       elapsedMs: 168,
       official: {
         ok: true, auth: 'account', auto: true, source: 'platform.deepseek.com/api/v0/usage/by_api_key',
-        todayKey, cny: days[todayKey].cny, yesterdayCny: days[keyOf(now - 86400000)]?.cny ?? 0,
-        hit: days[todayKey].hit, miss: days[todayKey].miss, out: days[todayKey].out,
-        requests: days[todayKey].calls, byHour: days[todayKey].byHour,
+        todayKey,
+        cny: officialDays[todayKey]?.cny ?? 0,
+        yesterdayCny: officialDays[keyOf(now - 86400000)]?.cny ?? 0,
+        hit: officialDays[todayKey]?.hit ?? 0,
+        miss: officialDays[todayKey]?.miss ?? 0,
+        out: officialDays[todayKey]?.out ?? 0,
+        requests: officialDays[todayKey]?.requests ?? 0,
+        byHour: days[todayKey].byHour,
         days: officialDays, fetchedAt: now,
       },
-      meterSource: 'official',
+      meterSource: 'mixed',
       billingUrl: 'https://platform.deepseek.com/usage',
       config: {
         dailyBudget: 50, monthlyBudget: 300, lowBalanceAlert: 20, alertAtPercent: 80,
-        showBalance: true, showOfficial: true, refreshSeconds: 60, officialOnly: true,
+        showBalance: true, showOfficial: true, refreshSeconds: 60, officialOnly: false,
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.2.0', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.0', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },

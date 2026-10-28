@@ -33,6 +33,7 @@ const HELP = `dsh-token-cost CLI 报表（北京时间 UTC+8）
   --json                把聚合结果输出为 JSON（stdout 只有 JSON）
   --csv <dataset>       输出 CSV：daily | sessions | models
   --budget N            今日预算（CNY），显示使用率与是否超支
+  --official-only       只统计 DeepSeek 官方 provider（默认同时统计 GLM / Kimi 等第三方路由）
   --sessions-root PATH  会话日志根目录（默认 DSH_SESSIONS / DSH_HOME/sessions / ~/.dsh/sessions）
   --help, -h            显示本帮助并退出
 
@@ -83,6 +84,7 @@ function parseArgs(argv) {
     json: false,
     csv: null,
     budget: null,
+    officialOnly: false,
     sessionsRoot: null,
     help: false,
   };
@@ -118,6 +120,10 @@ function parseArgs(argv) {
       case '--json':
         rejectValue();
         opts.json = true;
+        break;
+      case '--official-only':
+        rejectValue();
+        opts.officialOnly = true;
         break;
       case '--days':
         opts.days = parseInteger('--days', takeValue(), 1, MAX_DAYS);
@@ -289,7 +295,8 @@ function main() {
   }
   if (!stat.isDirectory()) die(`会话根目录不是目录：${root}`);
 
-  const data = aggregate(root);
+  // 默认统计全部 provider（官方 + pi-ai 的 GLM / Kimi 等第三方路由），按 model id 内置价计价
+  const data = aggregate(root, { includeOtherProviders: !opts.officialOnly });
   const now = data.generatedAt;
   const todayKey = dayKeyOf(now);
   const windowKeys = [];
@@ -338,6 +345,7 @@ function main() {
       days: data.days,
       models: data.models,
       providers: data.providers,
+      officialOnly: opts.officialOnly,
       sessions: data.sessions,
       windows,
       budget,
@@ -486,7 +494,8 @@ function main() {
 
   out.push('');
   out.push(`口径说明：金额为本机按 DeepSeek 官方费率（${PRICING_FETCHED_AT}）估算，不用于对账；`);
-  out.push(`          未知模型只记 token 不计费；仅统计官方 provider（${OFFICIAL_PROVIDERS.join(' / ')}）。`);
+  out.push('          金额按 model id 内置价（DeepSeek / GLM / Kimi）估算；未知模型只记 token 不计费。');
+  out.push(`          provider：DeepSeek 官方（${OFFICIAL_PROVIDERS.join(' / ')}）${opts.officialOnly ? ' only' : ' + pi-ai / 第三方路由'}。`);
   out.push('          缓存命中率 = 命中 token /（命中 + 未命中 token）。');
   process.stdout.write(`${out.join('\n')}\n`);
 }

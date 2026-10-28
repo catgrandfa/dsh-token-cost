@@ -634,6 +634,8 @@ Object.assign(zh, {
   'balanceCard': '账户余额',
   'offPeakHint': '空闲档 = 高峰价的一半',
   'detailTotals': '窗口合计',
+  'mixedShort': '官方 + 第三方',
+  'thirdPartyRateNote': 'GLM / Kimi 等第三方模型按明细里的固定单价计费，不适用 DeepSeek 峰谷价；官方峰谷价表只用于 DeepSeek token。',
   'budgetOff': '仅记录花费（未设每日预算）',
   'budgetOffHint': '预算为 0 时不告警、不显示进度条，只记录花费；点这里设置预算',
   'setBudget': '设置预算',
@@ -706,6 +708,8 @@ Object.assign(en, {
   'balanceCard': 'Balance',
   'offPeakHint': 'Off-peak = half of the peak price',
   'detailTotals': 'Window total',
+  'mixedShort': 'official + 3rd-party',
+  'thirdPartyRateNote': 'GLM / Kimi and other third-party models use their own flat per-model rates in the breakdown; the peak/off-peak table applies to DeepSeek tokens only.',
   'budgetOff': 'Record only (no daily budget)',
   'budgetOffHint': 'With a budget of 0 the panel records spend without alerts or progress bars; click to set one',
   'setBudget': 'Set budget',
@@ -897,6 +901,8 @@ function TokenMeterPanel(props) {
   const dayKeys = Object.keys(days).sort();
   const prevKey = dayKeys.filter((k) => k < today).pop();
   const prev = prevKey ? days[prevKey] : null;
+  const hasThirdParty = Object.keys(data.providers ?? {})
+    .some((provider) => provider !== 'deepseek-official' && provider !== 'deepseek-account');
 
   const unit = { hit: 0.02, miss: 1, out: 4 };
   const cfgRates = data.config?.rates;
@@ -917,9 +923,13 @@ function TokenMeterPanel(props) {
     const atTier = (tier) => (((SD.tier[tier] ?? {})[which] ?? 0) / 1e6) * rateOf(cfgRates?.[tier]?.['deepseek-flash'], which);
     return atTier('peak') + atTier('offPeak');
   };
-  const sHit = costOf('hit');
-  const sMiss = costOf('miss');
-  const sOut = costOf('out');
+  // 成本构成优先用宿主聚合出的「按 token 类型实际成本」（跨 provider 精确，GLM / Kimi 固定价也正确）；
+  // 老数据没有 costByType 时退回按 DeepSeek 峰谷价推算。
+  const typedCost = SD.costByType && (SD.costByType.hit + SD.costByType.miss + SD.costByType.out) > 0
+    ? SD.costByType : null;
+  const sHit = typedCost ? typedCost.hit : costOf('hit');
+  const sMiss = typedCost ? typedCost.miss : costOf('miss');
+  const sOut = typedCost ? typedCost.out : costOf('out');
   const tokOf = (which) => (SD.tier
     ? ((SD.tier.peak?.[which] ?? 0) + (SD.tier.offPeak?.[which] ?? 0))
     : (SD[which] ?? 0));
@@ -927,8 +937,8 @@ function TokenMeterPanel(props) {
   const splitTotal = (sHit + sMiss + sOut) > 0 ? (sHit + sMiss + sOut) : ((SD.cny ?? 0) || 1);
 
   /* ---------------- 金额窗口 ---------------- */
-  const daySrc = (data.meterSource === 'official' && data.official?.ok && data.official.days
-    && Object.keys(data.official.days).length) ? data.official.days : days;
+  // 宿主返回的 days 已合并官方 DeepSeek 用量与本地第三方用量，窗口直接用它
+  const daySrc = days;
   const cnyOfKey = (map, key) => {
     const v = map?.[key];
     if (v === null || v === undefined) return 0;
@@ -937,10 +947,10 @@ function TokenMeterPanel(props) {
   const keysBack = (n) => Array.from({ length: n }, (_, i) => new Date(Date.now() - i * 86400000 + 8 * 3600e3).toISOString().slice(0, 10));
   const sumKeys = (keys) => keys.reduce((acc, key) => acc + cnyOfKey(daySrc, key), 0);
   const last30 = keysBack(30);
-  // 自然月 / 季度 / 年：官方用量接口只有 30 天，宽窗口用本地日志（宿主的 localDays）
-  const localDays = data.localDays ?? days;
-  const localKeys = Object.keys(localDays).filter((key) => key <= today).sort();
-  const sumLocalFrom = (startKey) => localKeys.reduce((acc, key) => (key >= startKey ? acc + cnyOfKey(localDays, key) : acc), 0);
+  // 自然月 / 季度 / 年：宿主已把官方 30 天与本地第三方/更早历史合并进 days
+  const wideDays = days;
+  const localKeys = Object.keys(wideDays).filter((key) => key <= today).sort();
+  const sumLocalFrom = (startKey) => localKeys.reduce((acc, key) => (key >= startKey ? acc + cnyOfKey(wideDays, key) : acc), 0);
   const monthStart = naturalStartKeyOf('month', today);
   const quarterStart = naturalStartKeyOf('quarter', today);
   const yearStart = naturalStartKeyOf('year', today);
@@ -990,6 +1000,7 @@ function TokenMeterPanel(props) {
   const official = data.official;
   const officialOk = Boolean(official?.ok);
   const meterOfficial = data.meterSource === 'official';
+  const meterMixed = data.meterSource === 'mixed';
   const shown = D.cny;
   const officialBase = meterOfficial && Number(official?.yesterdayCny) > 0 ? Number(official.yesterdayCny) : null;
   const localBase = prev && prev.cny > 0 ? prev.cny : null;
@@ -1024,7 +1035,7 @@ function TokenMeterPanel(props) {
         : naturalStartKeyOf(detailRange, today);
   const cutoffMs = Date.parse(`${cutoffDay}T00:00:00+08:00`);
   // 宽窗口（月 / 季度 / 年）用本地完整历史，避免官方 30 天窗口把合计算少
-  const detailSource = (detailRange === 'month' || detailRange === 'quarter' || detailRange === 'year') ? localDays : days;
+  const detailSource = days;
   const detailTotals = (() => {
     const acc = { cny: 0, calls: 0, hit: 0, miss: 0, out: 0 };
     for (const [key, value] of Object.entries(detailSource)) {
@@ -1139,7 +1150,7 @@ function TokenMeterPanel(props) {
       fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
       border: `1px solid ${C.border}`, color: officialOk ? C.brand : C.label3, verticalAlign: 'middle',
     },
-  }, meterOfficial ? t('officialLabel') : t('localShort'));
+  }, meterOfficial ? t('officialLabel') : meterMixed ? t('mixedShort') : t('localShort'));
 
   /* ---------------- 概览 ---------------- */
   const overview = h('div', { key: 'overview' }, [
@@ -1402,6 +1413,7 @@ function TokenMeterPanel(props) {
         D.tier ? h('div', { key: 'tiernote', style: { fontSize: 10.5, color: C.label3, marginTop: 6 } },
           `${t('byLocalTier')}：${t('tierOffShort')} ${money(D.tier.offPeak?.cny ?? 0)} · ${t('tierPeakShort')} ${money(D.tier.peak?.cny ?? 0)}`) : null,
         h('div', { key: 'note', style: { fontSize: 10.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
+        hasThirdParty ? h('div', { key: 'third', style: { fontSize: 10.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
       ]),
     ]),
 
@@ -1511,7 +1523,7 @@ function TokenMeterPanel(props) {
     h('div', { key: 'split', style: S.card }, [
       h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 8, alignItems: 'baseline' } }, [
         splitDay === today ? null : h('span', { key: 'back', onClick: () => setSelDay(null), style: { cursor: 'pointer', color: C.brand, userSelect: 'none' } }, `↩ ${t('today')}`),
-        h('span', { key: 'tot', style: { color: C.label3, fontVariantNumeric: 'tabular-nums' } }, `${t('fromOfficial')} ${money(SD.cny ?? 0)}`),
+        h('span', { key: 'tot', style: { color: C.label3, fontVariantNumeric: 'tabular-nums' } }, `${t('fromOfficial')} ${money((sHit + sMiss + sOut) || SD.cny || 0)}`),
       ]) }, `${splitDay === today ? t('costSplit') : `${t('costSplit')} · ${splitDay.slice(5)}`}`),
       h('div', { key: 'rows', style: { display: 'flex', flexDirection: 'column', gap: 9, marginTop: 10 } },
         [
@@ -1542,7 +1554,7 @@ function TokenMeterPanel(props) {
         .filter((d) => (d.cny ?? 0) > 0 || (d.calls ?? 0) > 0);
       if (!historyDays.length) return null;
       return h('div', { key: 'hist', style: S.card }, [
-        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 10.5 } }, meterOfficial ? `platform.deepseek.com/api/v0/usage · ${historyDays.length} 天` : `${t('localShort')} · ${historyDays.length} 天`) }, t('historyTitle')),
+        h(SectionTitle, { key: 'h', right: h('span', { key: 's', style: { fontSize: 10.5 } }, meterOfficial ? `platform.deepseek.com/api/v0/usage · ${historyDays.length} 天` : meterMixed ? `${t('mixedShort')} · ${historyDays.length} 天` : `${t('localShort')} · ${historyDays.length} 天`) }, t('historyTitle')),
         h('table', { key: 'tb', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 8 } }, [
           tableHead(['日期', t('cost'), t('hitInput'), t('missInput'), t('output'), t('callsShort')], ['left', 'right', 'right', 'right', 'right', 'right']),
           h('tbody', { key: 'tb' }, historyDays.map((d) => h('tr', { key: d.date }, [
@@ -1653,7 +1665,7 @@ function TokenMeterPanel(props) {
 
     // provider（统计窗口口径）
     providerRows.length > 1 ? h('div', { key: 'providers', style: S.card }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, t('providerBreakdown')) }, t('providerBreakdown')),
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 10.5 } }, `${providerRows.length} provider`) }, t('providerBreakdown')),
       h('div', { key: 'list', style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 } }, providerRows.map(([provider, value]) => h('div', {
         key: provider,
         style: { border: `1px solid ${C.border1}`, borderRadius: 10, padding: '6px 10px', fontSize: 11.5, display: 'flex', alignItems: 'baseline', gap: 8 },

@@ -17,7 +17,8 @@
 Derived from the community plugin [`dsh-token-meter-panel`](https://github.com/olimc2016/dsh-token-meter-panel)
 (MIT, 0.6.7), this project keeps its collection / pricing / official-usage core but **rebuilds the
 panel UI** and adds daily-cost projection, a monthly budget, per-model breakdown, CSV/JSON export
-and a standalone CLI report.
+and a standalone CLI report. It also prices domestic third-party models such as **GLM (Zhipu)**
+and **Kimi (Moonshot)** from official per-model rates.
 
 DSH records token usage in session logs but **does not price it**. This plugin turns usage into money:
 
@@ -50,12 +51,13 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs local badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, four token stats, hit rate, cost per call, cost composition, peak/off-peak prices, 30-day trend, hourly distribution, live session usage |
-| **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model spend and share, per-session table (search, subagent tag), per-provider totals |
+| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, four token stats, hit rate, cost per call, cost composition, peak/off-peak prices, 30-day trend, hourly distribution, live session usage |
+| **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals |
 | **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 
 More:
 
+- **GLM / Kimi support**: third-party routes (pi-ai etc.) are included by default and priced by model id from official GLM / Kimi rates; unknown models are counted but never guessed
 - **No-budget mode**: budget defaults to `0` — record spend without progress bars or alerts; click to set one
 - **Sidebar preview**: the entry shows `Token · ¥9.87` (expanded text and collapsed tooltip)
 - **Peak / off-peak pricing**: Beijing time Mon–Fri 09:00–12:00 and 14:00–18:00, computed per tier then summed
@@ -72,7 +74,7 @@ More:
 ### GitHub (recommended, pinned)
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.2.0
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.0
 ```
 
 Use `--profile web` for the web profile.
@@ -121,11 +123,37 @@ Costs are estimated from **official DeepSeek CNY prices**:
 - **Unknown models are never priced**: tokens are counted, money is not guessed
 - Price source: <https://api-docs.deepseek.com/quick_start/pricing> (captured 2026-09-19)
 
+### Third-party models (GLM / Kimi)
+
+Provider routes added through pi-ai or similar adapters can have arbitrary names; pricing is keyed by
+**model id**, not by provider name:
+
+| Family | Models | Input / cache hit / output (CNY per 1M tokens) | Source |
+|---|---|---|---|
+| GLM | `glm-5.3`, `glm-5.2` | 8 / 2 / 28 | [Zhipu pricing](https://open.bigmodel.cn/pricing) (2026-10-28) |
+| GLM | `glm-5.1` (base tier) | 6 / 1.3 / 24 | same |
+| GLM | `glm-5.3-flash` | 0.8 / 0.23 / 2.8 | same |
+| GLM | `glm-5.3-flashx` | 2 / 0.57 / 7 | same |
+| GLM | `glm-4.7-flash` | free | same |
+| Kimi | `kimi-k3.1-pro` | 13 / 1.3 / 68 (cache write 13) | [Kimi pricing](https://platform.kimi.com/docs/pricing/chat) (2026-10-28) |
+| Kimi | `kimi-k3` | 20 / 2 / 100 (cache write 20) | same |
+| Kimi | `kimi-k3.1-pro-highspeed` | 26 / 1.3 / 136 | same |
+| Kimi | `kimi-k2.7-code` / `kimi-k2.6` | 6.5 / 1.3–1.1 / 27 | same |
+
+- Long-context tiers, limited-time discounts and subscription plans cannot be reconstructed from
+  aggregated tokens; the built-in rates use the standard base tier
+- Models without a built-in rate are counted as tokens only (`unpricedCalls`)
+- Model-name case and `provider/model` prefixes are normalized
+- Third-party **balance / plan quota** is not integrated yet; the balance card still queries DeepSeek only
+
 All rates, budgets, alert thresholds and refresh intervals are editable under
 **Settings → Plugins → token-cost**.
 
 **Budgets default to `0` (record-only)**: no progress bar and no alerts until you set a daily / monthly
 budget above zero. The sidebar entry also shows today's spend as `Token · ¥x.xx`.
+
+**Third-party providers are included by default** (GLM / Kimi etc.). Set `officialOnly` (or pass
+`--official-only` to the CLI) to restrict the report to DeepSeek.
 
 ---
 
@@ -136,7 +164,11 @@ budget above zero. The sidebar entry also shows today's spend as `Token · ¥x.x
    Multi-frame zstd is decoded in pure JS (`src/zstd.mjs`).
 2. **Official usage** (optional; preferred for daily totals)
    DSH account session when signed in, otherwise the browser `userToken` of `platform.deepseek.com`.
-3. **Balance / lifetime spend**: account service or `api.deepseek.com/user/balance`.
+3. **Third-party providers (GLM / Kimi etc.)**: from local logs; priced when a built-in rate matches
+4. **Balance / lifetime spend**: account service or `api.deepseek.com/user/balance` (DeepSeek only).
+
+The official usage API only covers the last 30 days of DeepSeek; the plugin merges it with local
+third-party usage per day (badge: "official + 3rd-party") while keeping provider/model detail separate.
 
 ### Known gaps
 
@@ -145,6 +177,7 @@ budget above zero. The sidebar entry also shows today's spend as `Token · ¥x.x
 - **Month / quarter / year use local logs**: the official usage API only returns the last 30 days;
   the scan window defaults to 365 days and may backfill in stages (the footer shows scan progress)
 - Local estimates may differ from the official bill by a few cents
+- GLM / Kimi tiered pricing, discounts and subscription plans are not recoverable; third-party balance is not integrated
 
 ---
 
@@ -172,6 +205,7 @@ node tools/report.mjs --days 7 --top 5        # readable: summary + daily + mode
 node tools/report.mjs --json
 node tools/report.mjs --csv daily             # daily | sessions | models
 node tools/report.mjs --budget 5
+node tools/report.mjs --official-only         # DeepSeek only
 node tools/report.mjs --sessions-root ~/.dsh/sessions
 ```
 

@@ -115,24 +115,31 @@ try {
     check('calls', data.calls, 0);
   }
 
-  console.log('-- 6) provider 口径：桌面端账号路由必须计价，第三方只记 token');
+  console.log('-- 6) provider 口径：DeepSeek 官方计价；第三方默认过滤，开启后按 model id 计价');
   {
     const { root } = fixture('--ws-f--', 's-providers', [['session.v4.jsonl.zstd', [
       record('deepseek-account', 'deepseek-flash'), // 桌面端账号登录
       record('deepseek-official', 'deepseek-flash'), // API Key 路由
-      record('openrouter', 'deepseek-flash'), // 第三方中转
+      record('openrouter', 'deepseek-flash'), // 第三方中转（模型名仍是 DeepSeek）
+      record('pi-ai', 'glm-5.3'), // 第三方路由 → GLM
+      record('pi-ai', 'kimi-k3.1-pro'), // 第三方路由 → Kimi
     ]]]);
     const data = aggregate(root);
     const provider = (name) => data.providers[name] ?? { calls: 0, cny: 0, tokens: 0 };
     check('deepseek-account calls', provider('deepseek-account').calls, 1);
     check('deepseek-account 已计价', Number(provider('deepseek-account').cny.toFixed(2)), 5.02);
     check('deepseek-official 已计价', Number(provider('deepseek-official').cny.toFixed(2)), 5.02);
-    check('openrouter 默认被过滤', provider('openrouter').calls, 0);
+    check('openrouter / pi-ai 默认被过滤', provider('openrouter').calls + provider('pi-ai').calls, 0);
 
     const all = aggregate(root, { includeOtherProviders: true });
     check('includeOtherProviders 后 openrouter calls', all.providers.openrouter.calls, 1);
-    check('openrouter 不计价', all.providers.openrouter.cny, 0);
-    check('openrouter 仍记 token', all.providers.openrouter.tokens, 3e6);
+    check('openrouter 按 model 计价', Number(all.providers.openrouter.cny.toFixed(2)), 5.02);
+    check('openrouter 记 token', all.providers.openrouter.tokens, 3e6);
+    // GLM-5.3：8 + 2 + 28 = 38；Kimi K3.1 Pro：13 + 1.3 + 68 = 82.3
+    check('pi-ai (GLM + Kimi) 已计价', Number(all.providers['pi-ai'].cny.toFixed(2)), 120.3);
+    check('pi-ai 记 token', all.providers['pi-ai'].tokens, 6e6);
+    check('glm 模型行存在', Boolean(all.models['pi-ai | glm-5.3']), true);
+    check('kimi 模型行存在', Boolean(all.models['pi-ai | kimi-k3.1-pro']), true);
   }
 
   console.log('-- 7) 未知模型：只记 token、不猜价（unpricedCalls 计数）');

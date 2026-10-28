@@ -238,6 +238,7 @@ function newCtx(opts = {}) {
     apiKeyEnv: 'DEEPSEEK_API_KEY', refreshSeconds: 60,
     offPeak: { 'deepseek-flash': { cacheHit: 0.02, cacheMiss: 1, output: 4 }, 'deepseek-v4-pro': { cacheHit: 0.15, cacheMiss: 4.5, output: 13.5 } },
     peak: { 'deepseek-flash': { cacheHit: 0.04, cacheMiss: 2, output: 8 }, 'deepseek-v4-pro': { cacheHit: 0.3, cacheMiss: 9, output: 27 } },
+    ...(opts.settings ?? {}),
   });
   const ctx = {
     settings: { register: () => ({ get: settingsFor, watch: () => () => {}, update() {}, replace() {} }) },
@@ -439,6 +440,67 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
       globalThis.fetch = realFetch;
     }
   }
+
+// ---- 混合口径：官方 DeepSeek 用量 + 本地 GLM 第三方用量 ----
+{
+  console.log('\n-- 混合口径（官方 + GLM 第三方） --');
+  const root = join(tmpdir(), `dsh-token-cost-mixed-${process.pid}`);
+  const sessionDir = join(root, 'ws-mixed', 'sess-mixed');
+  mkdirSync(sessionDir, { recursive: true });
+  const now = Date.now();
+  const records = [
+    { type: 'session', id: 'sess-mixed', createdAt: now - 60_000, delegationDepth: 0 },
+    {
+      type: 'assistant/message', time: now - 30_000,
+      data: {
+        usage: { inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0 },
+        message: { source: { provider: 'deepseek-account', model: 'deepseek-flash' } },
+      },
+    },
+    {
+      type: 'assistant/message', time: now - 20_000,
+      data: {
+        usage: { inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0 },
+        message: { source: { provider: 'pi-ai', model: 'glm-5.3' } },
+      },
+    },
+  ];
+  writeFileSync(join(sessionDir, 'session.jsonl'), records.map((r) => JSON.stringify(r)).join('\n'));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.includes('/api/v0/usage/by_api_key/')) {
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: { biz_code: 0, biz_data: { start: 0, end: 0, bucket: 86400, models: [], series: [], data: [{ currency: 'CNY', series: [] }] } } }) };
+    }
+    if (target.includes('/api/v0/users/get_user_summary')) return { ok: true, status: 200, json: async () => ({ data: { biz_data: { total_costs: [] } } }) };
+    throw new Error(`unexpected fetch: ${target}`);
+  };
+  try {
+    const { ctx: ctxM, routes: rM } = newCtx({
+      settings: { officialOnly: false, historyDays: 365, scanBudgetMs: 0 },
+      account: {
+        async getBalance() { return { status: 'ready', value: [{ currency: 'CNY', balance: '5' }], bonusWallets: [] }; },
+        async getPlatformSession() { return { origin: 'https://platform.deepseek.com', token: 'acct-session-token', requestHeaders: {} }; },
+      },
+    });
+    await mod.apply(ctxM, { sessionsRoot: root });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const got = await callRoute(rM, '/summary', '/token-cost/summary?refresh=1');
+    const data = got.payload;
+    const today = data?.days?.[data.today];
+    const ok = data?.meterSource === 'mixed'
+      && today && Math.abs(today.cny - 8) < 1e-6
+      && Math.abs((data.providers?.['pi-ai']?.cny ?? 0) - 8) < 1e-6;
+    console.log(`  ${ok ? 'PASS' : 'FAIL'} meterSource=${data?.meterSource} todayCny=${today?.cny} pi-ai=¥${data?.providers?.['pi-ai']?.cny}（官方 0 + GLM 8）`);
+    if (!ok) smokeFailures += 1;
+  } catch (error) {
+    console.log(`  FAIL 混合口径：${error?.message ?? error}`);
+    smokeFailures += 1;
+  } finally {
+    globalThis.fetch = realFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 console.log(smokeFailures === 0 ? 'HOST SMOKE OK' : `HOST SMOKE FAILED (${smokeFailures})`);
 if (smokeFailures > 0) process.exit(1);

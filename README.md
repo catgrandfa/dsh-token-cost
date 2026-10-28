@@ -14,7 +14,8 @@
 
 本项目派生自社区插件 [`dsh-token-meter-panel`](https://github.com/olimc2016/dsh-token-meter-panel)（MIT，0.6.7），
 保留其采集 / 计价 / 官方取数内核，**重做了面板 UI** 并新增了预算预测、月度预算、按模型明细、
-CSV/JSON 导出与独立 CLI 报表。
+CSV/JSON 导出与独立 CLI 报表；同时支持 **GLM（智谱）/ Kimi（月之暗面）** 等国产第三方模型，
+按模型内置单价计价。
 
 DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 token、不算钱**。这个插件把用量翻译成钱：
 
@@ -45,12 +46,13 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 
 | 视图 | 内容 |
 |---|---|
-| **总览** | 今日消费（官方 / 本地口径标注）、较昨日、当日预测、每日 / 本月预算进度、余额、近 7/30 天与**本月 / 本季度 / 本年**金额、token 四宫格、命中率、单次花费、成本构成、峰谷价表、30 天趋势、24 小时分时、本会话实时 |
-| **明细** | 今日 / 近 7 天 / 近 30 天 / 本月 / 本季度 / 本年切换；按模型消费与占比、按会话明细（可搜索、子代理打标）、按 provider 汇总 |
+| **总览** | 今日消费（官方 / 官方+第三方口径标注）、较昨日、当日预测、每日 / 本月预算进度、余额、近 7/30 天与**本月 / 本季度 / 本年**金额、token 四宫格、命中率、单次花费、成本构成、峰谷价表、30 天趋势、24 小时分时、本会话实时 |
+| **明细** | 今日 / 近 7 天 / 近 30 天 / 本月 / 本季度 / 本年切换；按模型（含 GLM / Kimi）消费与占比、按会话明细（可搜索、子代理打标）、按 provider 汇总 |
 | **导出** | 按天 / 按会话 / 按模型 × 今日 / 7 天 / 30 天 / 本月 / 季度 / 年 / 全部 × CSV / JSON，一键下载；附 CLI 与 HTTP 接口示例 |
 
 其他能力：
 
+- **GLM / Kimi 支持**：默认统计 pi-ai 等第三方路由；按 model id 匹配 GLM（智谱）与 Kimi（月之暗面）官方单价，未内置的模型只记 token 不猜价
 - **无预算模式**：预算默认 `0`，只记录花费、不告警、不显示进度条；想控预算时点一下设置
 - **侧栏今日花费预览**：侧栏入口直接显示 `Token · ¥9.87`（展开态文本 + 折叠态 tooltip）
 - **峰 / 谷分档计价**：高峰（北京时间工作日 9:00–12:00、14:00–18:00）与空闲档分别记账再汇总
@@ -67,7 +69,7 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 ### 方式一：GitHub 直装（推荐，固定版本）
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.2.0
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.3.0
 ```
 
 `web` profile 同理，把 `--profile desktop` 换成 `--profile web`。
@@ -117,11 +119,36 @@ dsh plugin --profile desktop add .
 - **未知模型不猜价**：只累加 token，不计金额
 - 价格来源：<https://api-docs.deepseek.com/zh-cn/quick_start/pricing>（内置价采集于 2026-09-19）
 
+### 第三方模型（GLM / Kimi）
+
+DSH 通过 pi-ai 等适配器接入的第三方路由，provider 名可以是任意值；插件按 **model id** 查内置价，
+provider 名不参与定价：
+
+| 系列 | 模型 | 输入 / 缓存命中 / 输出（元/百万 token） | 来源 |
+|---|---|---|---|
+| GLM | `glm-5.3`、`glm-5.2` | 8 / 2 / 28 | [智谱定价](https://open.bigmodel.cn/pricing)（2026-10-28） |
+| GLM | `glm-5.1`（基础档） | 6 / 1.3 / 24 | 同上 |
+| GLM | `glm-5.3-flash` | 0.8 / 0.23 / 2.8 | 同上 |
+| GLM | `glm-5.3-flashx` | 2 / 0.57 / 7 | 同上 |
+| GLM | `glm-4.7-flash` | 免费 | 同上 |
+| Kimi | `kimi-k3.1-pro` | 13 / 1.3 / 68（缓存写入 13） | [Kimi 定价](https://platform.kimi.com/docs/pricing/chat)（2026-10-28） |
+| Kimi | `kimi-k3` | 20 / 2 / 100（缓存写入 20） | 同上 |
+| Kimi | `kimi-k3.1-pro-highspeed` | 26 / 1.3 / 136 | 同上 |
+| Kimi | `kimi-k2.7-code` / `kimi-k2.6` | 6.5 / 1.3~1.1 / 27 | 同上 |
+
+- 长上下文阶梯价、限时折扣、套餐价**无法从聚合 token 还原**，内置值取标准档基础价
+- 未内置的第三方模型：只记 token、不计金额（`unpricedCalls` 会显示数量）
+- 模型名大小写、`provider/model` 前缀写法会自动归一化
+- 第三方**余额 / 套餐额度**暂未接入，余额卡仍只查 DeepSeek
+
 费率、每日预算、月度预算、告警阈值、刷新间隔、是否显示余额，都可以在
 **设置 → 插件 → token-cost** 里改；改完立刻生效。
 
 **预算默认是 `0`（只记录花费）**：不显示进度条、不告警；把每日 / 本月预算设成大于 0 的数，
 才会出现预算进度、告警线与超支提示。侧栏入口会同时显示今日花费（`Token · ¥x.xx`）。
+
+**统计范围默认包含第三方 provider**（GLM / Kimi 等）；只想看 DeepSeek 时把
+`officialOnly` 打开，或 CLI 加 `--official-only`。
 
 ---
 
@@ -134,7 +161,11 @@ dsh plugin --profile desktop add .
 2. **官方用量**（可选，按天金额优先来源）
    桌面端已登录时走 DSH 账号会话（`x-dsh-auth-token`，免网页登录）；否则尝试读取浏览器里
    `platform.deepseek.com` 的 `userToken`。数据与平台「用量」页同源。
-3. **余额 / 累计消费**：账号服务或 `api.deepseek.com/user/balance`。
+3. **第三方 provider（GLM / Kimi 等）**：来自本地日志；有内置单价就计价，否则只记 token
+4. **余额 / 累计消费**：账号服务或 `api.deepseek.com/user/balance`（仅 DeepSeek）。
+
+官方用量只覆盖 DeepSeek 最近 30 天，插件会把官方 DeepSeek 用量与本地第三方用量**按天合并**；
+角标显示「官方 + 第三方」，明细里仍能按 provider / 模型拆开。
 
 ### 已知盲区
 
@@ -143,6 +174,7 @@ dsh plugin --profile desktop add .
 - **自然月 / 季度 / 年按本地日志统计**：官方用量接口只返回最近 30 天；统计窗口默认 365 天，
   首次扫描可能分段补齐（面板底部会显示「正在补扫」）
 - 本地金额与官方账单允许几分差异；对账请以官方账单页为准
+- GLM / Kimi 的阶梯价 / 折扣 / 套餐无法恢复，第三方余额也未接入
 
 ---
 
@@ -170,6 +202,7 @@ node tools/report.mjs --days 7 --top 5        # 人类可读：汇总 + 每日 +
 node tools/report.mjs --json                  # 机器可读 JSON
 node tools/report.mjs --csv daily             # daily | sessions | models
 node tools/report.mjs --budget 5              # 今日预算使用率
+node tools/report.mjs --official-only         # 只看 DeepSeek 官方 provider
 node tools/report.mjs --sessions-root ~/.dsh/sessions
 ```
 

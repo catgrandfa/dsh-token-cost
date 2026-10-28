@@ -4,6 +4,36 @@
 衍生插件（fork），从上游 **0.6.7** 的 MIT 源码出发，重做面板 UI 并新增能力；
 版本号从 `0.1.0` 独立起算，与上游版本号不一一对应。
 
+## 0.3.0 — 支持国产第三方模型 GLM / Kimi
+
+### 新增
+
+- **第三方 provider 默认纳入统计**：`officialOnly` 默认改为 `false`，pi-ai / 第三方中转路由
+  （provider 名任意）一并聚合；按 **model id** 匹配内置费率，provider 名不参与定价。
+- **GLM（智谱 BigModel）内置价**（元/百万 token，2026-10-28 官方页）：
+  `glm-5.3` / `glm-5.2` 输入 8、缓存命中 2、输出 28；`glm-5.1` 6/1.3/24（基础档）；
+  `glm-5.3-flash` 0.8/0.23/2.8；`glm-5.3-flashx` 2/0.57/7；`glm-4.7-flash` 免费。
+- **Kimi（月之暗面）内置价**（元/百万 token，2026-10-28 官方页）：
+  `kimi-k3.1-pro` 13/1.3/68（缓存写入 13，5min TTL）；`kimi-k3` 20/2/100（写入 20）；
+  `kimi-k3.1-pro-highspeed` 26/1.3/136；`kimi-k2.7-code` 6.5/1.3/27；`kimi-k2.6` 6.5/1.1/27。
+- **官方 + 第三方合并**：官方用量接口只覆盖 DeepSeek 最近 30 天；现在把官方 DeepSeek 用量与本地
+  第三方用量按天合并（`meterSource: 'mixed'`，面板标注「官方 + 第三方」），第三方消费不再被官方数据覆盖。
+- **按 token 类型的真实成本**：新增 `costByType`（命中 / 未命中 / 输出 / 缓存写入），
+  成本构成可跨 provider 精确显示，不再用 DeepSeek 峰谷价去套 GLM / Kimi token。
+- **CLI 支持第三方**：`node tools/report.mjs` 默认统计全部 provider，可用 `--official-only` 只看 DeepSeek。
+- **模型名归一化**：`KIMI-K3.1-PRO`、`moonshot/kimi-k3` 等大小写 / provider 前缀写法都能命中费率表。
+
+### 变更
+
+- 面板角标新增「官方 + 第三方」；峰谷价卡增加第三方说明。
+- 官方 DeepSeek 峰谷价表只适用于 DeepSeek token；GLM / Kimi 在明细里按固定单价计费。
+- 版本号 → 0.3.0。
+
+### 已知限制
+
+- GLM / Kimi 内置价取官方标准档基础价；长上下文阶梯价、限时折扣、套餐价无法从聚合 token 还原。
+- 第三方余额 / 套餐额度（如 Z.ai Coding Plan）暂不接入；当前余额卡仍只查 DeepSeek。
+
 ## 0.2.0 — 无预算模式、自然季度 / 年、侧栏花费预览
 
 ### 新增

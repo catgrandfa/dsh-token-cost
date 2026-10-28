@@ -50,6 +50,17 @@ try {
         },
       },
     },
+    {
+      // 第三方路由（pi-ai）使用 GLM：默认应计入并按 GLM 内置价折算
+      type: 'assistant/message',
+      time: FIXED_CALL_MS + 5_000,
+      data: {
+        usage: { inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 100_000 },
+        message: {
+          source: { provider: 'pi-ai', model: 'glm-5.3' },
+        },
+      },
+    },
   ];
   writeFileSync(
     join(sessionDir, 'session.jsonl'),
@@ -65,14 +76,19 @@ try {
   } catch (error) {
     throw new Error(`--json 输出不是合法 JSON：${error.message}`);
   }
-  assert(json.calls === 1, `calls 应为 1，实际 ${json.calls}`);
+  assert(json.calls === 2, `calls 应为 2，实际 ${json.calls}`);
   assert(Object.keys(json.sessions).length === 1, `sessions 应为 1 条，实际 ${Object.keys(json.sessions).length}`);
   const day = json.days[FIXED_DAY];
-  assert(day && day.calls === 1, `days['${FIXED_DAY}'] 应有 1 次调用`);
+  assert(day && day.calls === 2, `days['${FIXED_DAY}'] 应有 2 次调用`);
   assert(day.cny > 0, `days['${FIXED_DAY}'].cny 应 > 0，实际 ${day.cny}`);
+  const glm = json.models['pi-ai | glm-5.3'];
+  assert(glm && glm.cny > 0, '第三方 GLM 模型应按内置单价计价');
+  assert(json.providers['pi-ai'] && json.providers['pi-ai'].cny > 0, 'providers 应包含 pi-ai 且金额 > 0');
   assert(json.windows && typeof json.windows.today.cny === 'number', 'windows.today.cny 应为数字');
   assert(json.budget && json.budget.daily === null && json.budget.over === false, '未给 --budget 时预算应为空且未超支');
-  console.log(`ok json: calls=1 sessions=1 ${FIXED_DAY} cny=${day.cny}`);
+  const officialOnly = JSON.parse(run(['--json', '--official-only', '--sessions-root', tmp]));
+  assert(officialOnly.calls === 1 && !officialOnly.models['pi-ai | glm-5.3'], '--official-only 应排除第三方 provider');
+  console.log(`ok json: calls=2（含 GLM 第三方） sessions=1 ${FIXED_DAY} cny=${day.cny}`);
 
   /* ------------------------------ --csv daily ------------------------------ */
   const csvDays = 3650;
