@@ -36,6 +36,14 @@ const READY = {
   sessions: [{ id: 's1', title: '会话', cny: 1.2, calls: 20, hit: 3e6, miss: 1e4, out: 2e4, at: Date.now(), isSubagent: false }],
 };
 
+const NO_BUDGET = {
+  ...READY,
+  config: { ...READY.config, dailyBudget: 0, monthlyBudget: 0 },
+  localDays: READY.days,
+};
+let ACTIVE = READY;
+let FORCED_VIEW = null;
+
 const React = {
   createElement: (type, props, ...children) => ({
     type,
@@ -44,10 +52,12 @@ const React = {
   }),
   // 数据类状态（{status,data}）直接落成 ready 数据；其余保持原值
   useState: (init) => {
+    // 视图状态（初值 'overview'）在渲染门禁里强制切换，覆盖三个视图分支
+    if (init === 'overview') return [FORCED_VIEW ?? 'overview', () => {}];
     const value = typeof init === 'function' ? init() : init;
     if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
       return [{
-        ...value, status: 'ready', data: READY, error: null, at: Date.now(),
+        ...value, status: 'ready', data: ACTIVE, error: null, at: Date.now(),
         refresh() {}, reload() {},
       }, () => {}];
     }
@@ -69,6 +79,7 @@ if (!entry) {
 }
 
 let panel = null;
+const cleanups = [];
 const mod = entry.factory((name) => {
   if (name === 'react') return React;
   throw new Error(`unexpected require: ${name}`);
@@ -82,7 +93,7 @@ mod.apply({
     },
   },
   locale: { register: () => () => {} },
-  effect: (cb) => { cb(); return () => {}; },
+  effect: (cb) => { cleanups.push(cb()); return () => {}; },
 });
 if (!panel) {
   console.error('FAIL: 没有注册 main 面板组件');
@@ -100,16 +111,32 @@ const walk = (node) => {
   walk(node.children);
 };
 
+let totalVisited = 0;
 try {
+  for (const view of ['overview', 'detail', 'export']) {
+    FORCED_VIEW = view;
+    ACTIVE = READY;
+    visited = 0;
+    walk(panel({ t: (k) => k, useProjection: undefined }));
+    totalVisited += visited;
+  }
+  // 无预算（只记录花费）分支
+  FORCED_VIEW = 'overview';
+  ACTIVE = NO_BUDGET;
+  visited = 0;
   walk(panel({ t: (k) => k, useProjection: undefined }));
+  totalVisited += visited;
 } catch (error) {
   console.error(`FAIL: 有数据状态渲染抛错 -> ${error?.message ?? error}`);
   console.error(String(error?.stack ?? '').split('\n').slice(1, 5).join('\n'));
   process.exit(1);
 }
-console.log(`data-state render OK（遍历 ${visited} 个节点）`);
-if (visited < 200) {
-  console.error(`FAIL: 覆盖不足（只遍历到 ${visited} 个节点，期望 > 200）`);
+console.log(`data-state render OK（三视图 + 无预算，遍历 ${totalVisited} 个节点）`);
+for (const cleanup of cleanups) {
+  try { cleanup?.(); } catch { /* ignore */ }
+}
+if (totalVisited < 500) {
+  console.error(`FAIL: 覆盖不足（只遍历到 ${totalVisited} 个节点，期望 > 500）`);
   process.exit(1);
 }
 console.log('RENDER GATE OK');

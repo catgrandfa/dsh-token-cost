@@ -45,12 +45,14 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 
 | 视图 | 内容 |
 |---|---|
-| **总览** | 今日消费（官方 / 本地口径标注）、较昨日、当日预测、每日 / 本月预算进度、余额、近 7/30 天与本月金额、token 四宫格、命中率、单次花费、成本构成、峰谷价表、30 天趋势、24 小时分时、本会话实时 |
-| **明细** | 今日 / 近 7 天 / 近 30 天切换；按模型消费与占比、按会话明细（可搜索、子代理打标）、按 provider 汇总 |
-| **导出** | 按天 / 按会话 / 按模型 × 今日 / 7 天 / 30 天 / 全部 × CSV / JSON，一键下载；附 CLI 与 HTTP 接口示例 |
+| **总览** | 今日消费（官方 / 本地口径标注）、较昨日、当日预测、每日 / 本月预算进度、余额、近 7/30 天与**本月 / 本季度 / 本年**金额、token 四宫格、命中率、单次花费、成本构成、峰谷价表、30 天趋势、24 小时分时、本会话实时 |
+| **明细** | 今日 / 近 7 天 / 近 30 天 / 本月 / 本季度 / 本年切换；按模型消费与占比、按会话明细（可搜索、子代理打标）、按 provider 汇总 |
+| **导出** | 按天 / 按会话 / 按模型 × 今日 / 7 天 / 30 天 / 本月 / 季度 / 年 / 全部 × CSV / JSON，一键下载；附 CLI 与 HTTP 接口示例 |
 
 其他能力：
 
+- **无预算模式**：预算默认 `0`，只记录花费、不告警、不显示进度条；想控预算时点一下设置
+- **侧栏今日花费预览**：侧栏入口直接显示 `Token · ¥9.87`（展开态文本 + 折叠态 tooltip）
 - **峰 / 谷分档计价**：高峰（北京时间工作日 9:00–12:00、14:00–18:00）与空闲档分别记账再汇总
 - **官方对账**：可选接入 DeepSeek 账号会话或 `platform.deepseek.com` 网页登录态，按天金额与平台用量页同源
 - **余额**：桌面端账号登录或 `DEEPSEEK_API_KEY` 双路；账号路径还能读累计消费
@@ -65,7 +67,7 @@ DSH 会把每次模型调用的 token 用量写进会话日志，但**只记 tok
 ### 方式一：GitHub 直装（推荐，固定版本）
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.1.0
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.2.0
 ```
 
 `web` profile 同理，把 `--profile desktop` 换成 `--profile web`。
@@ -118,6 +120,9 @@ dsh plugin --profile desktop add .
 费率、每日预算、月度预算、告警阈值、刷新间隔、是否显示余额，都可以在
 **设置 → 插件 → token-cost** 里改；改完立刻生效。
 
+**预算默认是 `0`（只记录花费）**：不显示进度条、不告警；把每日 / 本月预算设成大于 0 的数，
+才会出现预算进度、告警线与超支提示。侧栏入口会同时显示今日花费（`Token · ¥x.xx`）。
+
 ---
 
 ## 数据从哪来
@@ -135,6 +140,8 @@ dsh plugin --profile desktop add .
 
 - 会话标题生成、联网搜索这两类调用**不落 usage**，无法计入花费
 - 活跃会话仍在追加写入，所以「今日」是**下界**（面板底部有标注）
+- **自然月 / 季度 / 年按本地日志统计**：官方用量接口只返回最近 30 天；统计窗口默认 365 天，
+  首次扫描可能分段补齐（面板底部会显示「正在补扫」）
 - 本地金额与官方账单允许几分差异；对账请以官方账单页为准
 
 ---
@@ -150,8 +157,8 @@ HTTP 接口（与面板同源，需要 DSH 登录态）：
 
 ```bash
 GET /token-cost/export?dataset=daily&scope=7d&format=csv
-GET /token-cost/export?dataset=sessions&scope=30d&format=json
-GET /token-cost/export?dataset=models&scope=all&format=csv
+GET /token-cost/export?dataset=sessions&scope=month&format=json
+GET /token-cost/export?dataset=models&scope=year&format=csv
 ```
 
 ### 命令行报表

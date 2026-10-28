@@ -67,7 +67,7 @@ function demoData() {
     'provider 口径与计费路由',
   ];
   const totalCalls = 18;
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 365; i += 1) {
     const ms = now - i * 86400000;
     const key = keyOf(ms);
     const dow = cst(ms).getUTCDay();
@@ -139,8 +139,12 @@ function demoData() {
     };
     sessMs -= 3 * 3600e3;
   });
+  // 官方用量接口只返回最近 30 天：演示数据也照实模拟，宽窗口（月/季/年）由本地 days 提供
   const officialDays = {};
-  for (const [key, value] of Object.entries(days)) {
+  for (let i = 0; i < 30; i += 1) {
+    const key = keyOf(now - i * 86400000);
+    const value = days[key];
+    if (!value) continue;
     officialDays[key] = { cny: value.cny, hit: value.hit, miss: value.miss, out: value.out, requests: value.calls };
   }
   return {
@@ -181,7 +185,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.1.0', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.2.0', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },

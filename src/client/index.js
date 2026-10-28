@@ -634,6 +634,18 @@ Object.assign(zh, {
   'balanceCard': '账户余额',
   'offPeakHint': '空闲档 = 高峰价的一半',
   'detailTotals': '窗口合计',
+  'budgetOff': '仅记录花费（未设每日预算）',
+  'budgetOffHint': '预算为 0 时不告警、不显示进度条，只记录花费；点这里设置预算',
+  'setBudget': '设置预算',
+  'windowQuarter': '本季度',
+  'windowYear': '本年',
+  'wideSourceNote': '本月 / 季度 / 年按本地日志统计；官方用量接口只返回最近 30 天',
+  'rangeMonth': '本月',
+  'rangeQuarter': '本季度',
+  'rangeYear': '本年',
+  'scopeMonth': '本月',
+  'scopeQuarter': '本季度',
+  'scopeYear': '本年',
 });
 
 Object.assign(en, {
@@ -694,6 +706,18 @@ Object.assign(en, {
   'balanceCard': 'Balance',
   'offPeakHint': 'Off-peak = half of the peak price',
   'detailTotals': 'Window total',
+  'budgetOff': 'Record only (no daily budget)',
+  'budgetOffHint': 'With a budget of 0 the panel records spend without alerts or progress bars; click to set one',
+  'setBudget': 'Set budget',
+  'windowQuarter': 'This quarter',
+  'windowYear': 'This year',
+  'wideSourceNote': 'Month / quarter / year use local logs; the official usage API only returns the last 30 days',
+  'rangeMonth': 'Month',
+  'rangeQuarter': 'Quarter',
+  'rangeYear': 'Year',
+  'scopeMonth': 'Month',
+  'scopeQuarter': 'Quarter',
+  'scopeYear': 'Year',
 });
 
 /* ------------------------------------------------------------------ *
@@ -704,6 +728,18 @@ const BLANK_DAY = {
   miss: 0, hit: 0, out: 0, calls: 0, cny: 0, hitRate: null,
   byHour: new Array(24).fill(0), peakCalls: 0,
 };
+
+/** 自然月 / 自然季度 / 自然年的起始日期键（北京时间，'YYYY-MM-DD'） */
+function naturalStartKeyOf(kind, todayKey) {
+  const year = todayKey.slice(0, 4);
+  if (kind === 'year') return `${year}-01-01`;
+  const month = Number(todayKey.slice(5, 7));
+  if (kind === 'quarter') {
+    const firstMonth = Math.floor((month - 1) / 3) * 3 + 1;
+    return `${year}-${String(firstMonth).padStart(2, '0')}-01`;
+  }
+  return `${todayKey.slice(0, 7)}-01`;
+}
 
 function Chip({ active, onClick, children, title }) {
   return h('div', {
@@ -901,12 +937,22 @@ function TokenMeterPanel(props) {
   const keysBack = (n) => Array.from({ length: n }, (_, i) => new Date(Date.now() - i * 86400000 + 8 * 3600e3).toISOString().slice(0, 10));
   const sumKeys = (keys) => keys.reduce((acc, key) => acc + cnyOfKey(daySrc, key), 0);
   const last30 = keysBack(30);
-  const monthKeys = Object.keys(daySrc ?? {}).filter((k) => k.startsWith(today.slice(0, 7)));
-  const monthSpent = sumKeys(monthKeys);
+  // 自然月 / 季度 / 年：官方用量接口只有 30 天，宽窗口用本地日志（宿主的 localDays）
+  const localDays = data.localDays ?? days;
+  const localKeys = Object.keys(localDays).filter((key) => key <= today).sort();
+  const sumLocalFrom = (startKey) => localKeys.reduce((acc, key) => (key >= startKey ? acc + cnyOfKey(localDays, key) : acc), 0);
+  const monthStart = naturalStartKeyOf('month', today);
+  const quarterStart = naturalStartKeyOf('quarter', today);
+  const yearStart = naturalStartKeyOf('year', today);
+  const monthSpent = sumLocalFrom(monthStart);
+  const quarterSpent = sumLocalFrom(quarterStart);
+  const yearSpent = sumLocalFrom(yearStart);
   const windows = [
     { key: 'd7', label: t('window7'), value: sumKeys(last30.slice(0, 7)) },
     { key: 'd30', label: t('window30'), value: sumKeys(last30) },
-    { key: 'month', label: t('windowMonth'), value: monthSpent },
+    { key: 'month', label: t('windowMonth'), value: monthSpent, local: true },
+    { key: 'quarter', label: t('windowQuarter'), value: quarterSpent, local: true },
+    { key: 'year', label: t('windowYear'), value: yearSpent, local: true },
   ];
 
   /* ---------------- 预算 / 余额 / 口径 ---------------- */
@@ -974,11 +1020,14 @@ function TokenMeterPanel(props) {
   /* ---------------- 明细窗口 ---------------- */
   const cutoffDay = detailRange === 'today' ? today
     : detailRange === '7d' ? dayKeyOf(Date.now() - 6 * 86400000)
-      : dayKeyOf(Date.now() - 29 * 86400000);
+      : detailRange === '30d' ? dayKeyOf(Date.now() - 29 * 86400000)
+        : naturalStartKeyOf(detailRange, today);
   const cutoffMs = Date.parse(`${cutoffDay}T00:00:00+08:00`);
+  // 宽窗口（月 / 季度 / 年）用本地完整历史，避免官方 30 天窗口把合计算少
+  const detailSource = (detailRange === 'month' || detailRange === 'quarter' || detailRange === 'year') ? localDays : days;
   const detailTotals = (() => {
     const acc = { cny: 0, calls: 0, hit: 0, miss: 0, out: 0 };
-    for (const [key, value] of Object.entries(days)) {
+    for (const [key, value] of Object.entries(detailSource)) {
       if (key < cutoffDay) continue;
       acc.cny += Number(value.cny ?? 0);
       acc.calls += Number(value.calls ?? 0);
@@ -1138,13 +1187,19 @@ function TokenMeterPanel(props) {
         h('div', {
           key: 'money',
           style: { marginTop: 4, paddingTop: 8, borderTop: `1px solid ${C.border1}`, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '7px 12px' },
-        }, windows.map((m) => h('div', { key: m.key, style: { minWidth: 0 } }, [
-          h('div', { key: 'l', style: { fontSize: 10.5, color: C.label3, whiteSpace: 'nowrap' } }, m.label),
+        }, [
+          ...windows.map((m) => h('div', { key: m.key, style: { minWidth: 0 } }, [
+            h('div', { key: 'l', style: { fontSize: 10.5, color: C.label3, whiteSpace: 'nowrap' } }, m.label),
+            h('div', {
+              key: 'v',
+              style: { fontSize: 15, fontWeight: 650, color: C.label2, fontVariantNumeric: 'tabular-nums' },
+            }, `¥${fmtMoney(m.value)}`),
+          ])),
           h('div', {
-            key: 'v',
-            style: { fontSize: 15, fontWeight: 650, color: C.label2, fontVariantNumeric: 'tabular-nums' },
-          }, `¥${fmtMoney(m.value)}`),
-        ]))),
+            key: 'wnote',
+            style: { gridColumn: '1 / -1', fontSize: 10, color: C.label3, lineHeight: 1.6 },
+          }, t('wideSourceNote')),
+        ]),
         balCost ? h('div', {
           key: 'total',
           style: { fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' },
@@ -1155,20 +1210,35 @@ function TokenMeterPanel(props) {
         h('div', { key: 'h', style: { fontSize: 12, fontWeight: 650, color: C.label2 } }, t('budgetCard')),
         h('div', { key: 'b1' }, [
           h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, marginBottom: 5 } }, [
-            h('span', {
+            budget > 0 ? h('span', {
               key: 'n', title: t('editBudgetHint'),
               onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: String(budget) }),
               style: { color: C.label3, cursor: 'pointer', textDecoration: 'underline dotted' },
-            }, `${t('budgetUsed')} ${money(budget)} ✎`),
+            }, `${t('budgetUsed')} ${money(budget)} ✎`)
+              : h('span', {
+                key: 'n', title: t('budgetOffHint'),
+                onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: String(budget) }),
+                style: { color: C.label2, cursor: 'pointer', textDecoration: 'underline dotted' },
+              }, `${t('budgetOff')} ✎`),
             h('span', {
               key: 'v',
-              style: { marginLeft: 'auto', color: over ? C.error : C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
-            }, `${t('used')} ${usedPct.toFixed(1)}% · ${t('remain')} ${money(Math.max(0, budget - D.cny))}${over ? ` · ⚠ ${t('overBudget')}` : warn ? ` · ⚠ ${t('warnLine')} ${alertPct}%` : ''}`),
+              style: {
+                marginLeft: 'auto', color: over ? C.error : C.label2, fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+              },
+            }, budget > 0
+              ? `${t('used')} ${usedPct.toFixed(1)}% · ${t('remain')} ${money(Math.max(0, budget - D.cny))}${over ? ` · ⚠ ${t('overBudget')}` : warn ? ` · ⚠ ${t('warnLine')} ${alertPct}%` : ''}`
+              : `今日 ${money(D.cny)}`),
           ]),
           budget > 0 ? h(Progress, {
             key: 'p', value: usedPct, color: over ? C.error : warn ? C.warn : C.brand,
             marker: alertPct > 0 && alertPct < 100 ? { at: alertPct, title: `${t('warnLine')} ${alertPct}%` } : null,
-          }) : h('div', { key: 'p', style: { fontSize: 10.5, color: C.label3 } }, t('monthOff')),
+          }) : h('div', {
+            key: 'p',
+            title: t('budgetOffHint'),
+            onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: '50' }),
+            style: { fontSize: 10.5, color: C.label3, cursor: 'pointer', lineHeight: 1.6 },
+          }, t('budgetOffHint')),
           h('div', {
             key: 'proj',
             style: { display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, fontSize: 11, color: C.label3 },
@@ -1183,9 +1253,13 @@ function TokenMeterPanel(props) {
         ]),
         h('div', { key: 'b2', style: { borderTop: `1px solid ${C.border1}`, paddingTop: 7 } }, [
           h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, marginBottom: 5 } }, [
-            h('span', { key: 'n', style: { color: C.label3 } }, `${t('monthBudget')}`),
+            h('span', {
+              key: 'n', title: t('budgetOffHint'),
+              onClick: () => setEdit({ field: 'monthlyBudget', label: t('monthBudget'), value: String(monthBudget) }),
+              style: { color: C.label3, cursor: 'pointer', textDecoration: 'underline dotted' },
+            }, `${t('monthBudget')} ✎`),
             h('span', { key: 'v', style: { marginLeft: 'auto', color: C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' } },
-              monthBudget > 0 ? `¥${fmtMoney(monthSpent)} / ¥${fmtMoney(monthBudget)}` : t('monthOff')),
+              monthBudget > 0 ? `¥${fmtMoney(monthSpent)} / ¥${fmtMoney(monthBudget)}` : `${t('monthSpent')} ¥${fmtMoney(monthSpent)} · ${t('monthOff')}`),
           ]),
           monthBudget > 0 ? h(Progress, {
             key: 'p', value: monthPct, color: monthPct >= 100 ? C.error : monthPct >= 80 ? C.warn : C.brand,
@@ -1501,10 +1575,13 @@ function TokenMeterPanel(props) {
   const detail = h('div', { key: 'detail' }, [
     h('div', { key: 'head', style: { ...S.card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } }, [
       h('div', { key: 't', style: { fontSize: 12.5, fontWeight: 650, color: C.label2 } }, t('detailTitle')),
-      h('div', { key: 'chips', style: { display: 'flex', gap: 6 } }, [
+      h('div', { key: 'chips', style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, [
         h(Chip, { key: 'today', active: detailRange === 'today', onClick: () => setDetailRange('today') }, t('rangeToday')),
         h(Chip, { key: '7d', active: detailRange === '7d', onClick: () => setDetailRange('7d') }, t('range7d')),
         h(Chip, { key: '30d', active: detailRange === '30d', onClick: () => setDetailRange('30d') }, t('range30d')),
+        h(Chip, { key: 'month', active: detailRange === 'month', onClick: () => setDetailRange('month') }, t('rangeMonth')),
+        h(Chip, { key: 'quarter', active: detailRange === 'quarter', onClick: () => setDetailRange('quarter') }, t('rangeQuarter')),
+        h(Chip, { key: 'year', active: detailRange === 'year', onClick: () => setDetailRange('year') }, t('rangeYear')),
       ]),
       h('span', { key: 'sp', style: { flex: 1 } }),
       h('span', { key: 'tot', style: { fontSize: 11, color: C.label3, fontVariantNumeric: 'tabular-nums' } },
@@ -1644,6 +1721,9 @@ function TokenMeterPanel(props) {
           exportOption('today', t('scopeToday'), exportScope, setExportScope),
           exportOption('7d', t('scope7d'), exportScope, setExportScope),
           exportOption('30d', t('scope30d'), exportScope, setExportScope),
+          exportOption('month', t('scopeMonth'), exportScope, setExportScope),
+          exportOption('quarter', t('scopeQuarter'), exportScope, setExportScope),
+          exportOption('year', t('scopeYear'), exportScope, setExportScope),
           exportOption('all', t('scopeAll'), exportScope, setExportScope),
         ]),
         exportRow(t('format'), [
@@ -1766,14 +1846,69 @@ export const inject = ['slots', 'locale'];
 export function apply(ctx) {
   ctx.effect(() => ctx.locale.register(LOCALE_NS, { zh, en }), `${LOCALE_NS}: dictionaries`);
 
-  // 侧栏入口（id 必须与 main 面板的 key 同名，sidebar 用 id 去选中面板）
-  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist',
-    id: SLOT_ID,
-    order: 90,
-    label: () => 'Token',
-    locale: LOCALE_NS,
-  }, (props) => React.createElement(MeterIcon, { size: props?.size ?? 16, active: props?.active })));
+  /* 侧栏入口：图标 + 今日花费预览。
+   * sidebar.panellist 的 label 只在注册 / locale 变化时被解析（resolveSlotLabel），
+   * 因此金额变化时重注册这一行（dispose → register），id 不变，选中状态与 main 面板不受影响。
+   * 数据优先复用面板的 lastSummary（同一模块内共享，零额外请求）；面板从未打开时，
+   * 插件运行 45 秒后每 2 分钟轻量拉一次 /summary（宿主有增量缓存）。 */
+  let sidebarCost = null;
+  let entryDispose = null;
+  const sidebarLabel = () => (sidebarCost == null ? 'Token' : `Token · ¥${fmtMoney(sidebarCost)}`);
+  const mountSidebarEntry = () => {
+    if (!ctx.slots?.register) return;
+    try { entryDispose?.(); } catch { /* 旧的已经释放 */ }
+    try {
+      entryDispose = ctx.slots.register({
+        name: 'sidebar.panellist',
+        id: SLOT_ID,
+        order: 90,
+        label: sidebarLabel,
+        locale: LOCALE_NS,
+      }, (props) => React.createElement(MeterIcon, { size: props?.size ?? 16, active: props?.active }));
+    } catch {
+      // 极端情况（slot 已被卸载）：侧栏入口先空着，下一次 tick 会重试；不影响面板
+      entryDispose = null;
+    }
+  };
+  ctx.slots.inject('sidebar.panellist', () => {
+    mountSidebarEntry();
+    return () => {
+      try { entryDispose?.(); } catch { /* ignore */ }
+      entryDispose = null;
+    };
+  });
+
+  const applySidebarCost = (summary) => {
+    if (!summary?.days) return;
+    const cny = Number(summary.days[summary.today]?.cny ?? 0);
+    if (!Number.isFinite(cny) || cny === sidebarCost) return;
+    sidebarCost = cny;
+    mountSidebarEntry();
+  };
+  const mountedAt = Date.now();
+  let lastScanAt = 0;
+  ctx.effect(() => {
+    const tick = async () => {
+      if (!entryDispose) mountSidebarEntry(); // 上次重注册失败（slot 短暂不可用）则重试
+      // 面板已打开：直接复用它的缓存，不产生请求
+      if (lastSummary && Date.now() - lastSummary.at < 5 * 60 * 1000) {
+        applySidebarCost(lastSummary.data);
+        return;
+      }
+      // 面板从未打开：等启动稳定后再拉一次，避免和 DSH 启动抢资源
+      if (Date.now() - mountedAt < 45 * 1000) return;
+      if (Date.now() - lastScanAt < 120 * 1000) return;
+      lastScanAt = Date.now();
+      try {
+        const response = await fetch(`${ROUTE_BASE}/summary`, { cache: 'no-store', credentials: 'same-origin' });
+        const body = await response.json();
+        if (body?.ok) applySidebarCost(body.data);
+      } catch { /* 侧栏预览失败不影响面板 */ }
+    };
+    const timer = setInterval(tick, 20 * 1000);
+    tick();
+    return () => clearInterval(timer);
+  }, 'token-cost: sidebar preview');
 
   // 中栏独立面板
   ctx.slots.inject('main', () => ctx.slots.register({

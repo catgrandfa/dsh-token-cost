@@ -367,6 +367,20 @@ async function callRoute(ctxRoutes, path, url, method = 'GET') {
   console.log(`  ${modelsOk ? 'PASS' : 'FAIL'} models 导出表头`);
   if (!modelsOk) smokeFailures += 1;
 
+  // 自然月 / 季度 / 年：宽 scope 应回落到本地日志口径（官方接口只有 30 天）
+  const yearJson = await callExport('/token-cost/export?dataset=daily&scope=year&format=json');
+  const yearParsed = JSON.parse(yearJson.body);
+  const yearOk = yearJson.status === 200 && yearParsed.scope === 'year' && yearParsed.source === 'local'
+    && Array.isArray(yearParsed.rows);
+  console.log(`  ${yearOk ? 'PASS' : 'FAIL'} 自然年导出 source=${yearParsed.source} rows=${yearParsed.rows?.length}`);
+  if (!yearOk) smokeFailures += 1;
+
+  const quarterCsv = await callExport('/token-cost/export?dataset=daily&scope=quarter&format=csv');
+  const quarterOk = quarterCsv.status === 200 && /^date,cny,/.test(quarterCsv.body)
+    && /filename="dsh-token-cost-daily-quarter-/.test(quarterCsv.headers['content-disposition'] ?? '');
+  console.log(`  ${quarterOk ? 'PASS' : 'FAIL'} 自然季度 CSV 下载头`);
+  if (!quarterOk) smokeFailures += 1;
+
   // 面板内把预算写回设置：POST /settings 接受 monthlyBudget
   const settingsRoute = routes.find((r) => r.path.endsWith('/settings'));
   let postBody = '', postStatus = 0;

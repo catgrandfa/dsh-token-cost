@@ -50,12 +50,14 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs local badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and month totals, four token stats, hit rate, cost per call, cost composition, peak/off-peak prices, 30-day trend, hourly distribution, live session usage |
-| **Breakdown** | Today / 7d / 30d switch; per-model spend and share, per-session table (search, subagent tag), per-provider totals |
-| **Export** | Daily / sessions / models × today / 7d / 30d / all × CSV / JSON, one-click download; CLI and HTTP examples |
+| **Overview** | Today's spend (official vs local badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, four token stats, hit rate, cost per call, cost composition, peak/off-peak prices, 30-day trend, hourly distribution, live session usage |
+| **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model spend and share, per-session table (search, subagent tag), per-provider totals |
+| **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 
 More:
 
+- **No-budget mode**: budget defaults to `0` — record spend without progress bars or alerts; click to set one
+- **Sidebar preview**: the entry shows `Token · ¥9.87` (expanded text and collapsed tooltip)
 - **Peak / off-peak pricing**: Beijing time Mon–Fri 09:00–12:00 and 14:00–18:00, computed per tier then summed
 - **Official cross-check**: optional DeepSeek account session or `platform.deepseek.com` web login
 - **Balance**: DSH account or `DEEPSEEK_API_KEY`; the account path also exposes lifetime spend
@@ -70,7 +72,7 @@ More:
 ### GitHub (recommended, pinned)
 
 ```bash
-dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.1.0
+dsh plugin --profile desktop add github:catgrandfa/dsh-token-cost#v0.2.0
 ```
 
 Use `--profile web` for the web profile.
@@ -122,6 +124,9 @@ Costs are estimated from **official DeepSeek CNY prices**:
 All rates, budgets, alert thresholds and refresh intervals are editable under
 **Settings → Plugins → token-cost**.
 
+**Budgets default to `0` (record-only)**: no progress bar and no alerts until you set a daily / monthly
+budget above zero. The sidebar entry also shows today's spend as `Token · ¥x.xx`.
+
 ---
 
 ## Data sources
@@ -137,6 +142,8 @@ All rates, budgets, alert thresholds and refresh intervals are editable under
 
 - Session-title generation and web-search calls do not persist `usage`
 - Active sessions are still appending, so "today" is a lower bound (noted in the panel footer)
+- **Month / quarter / year use local logs**: the official usage API only returns the last 30 days;
+  the scan window defaults to 365 days and may backfill in stages (the footer shows scan progress)
 - Local estimates may differ from the official bill by a few cents
 
 ---
@@ -152,8 +159,8 @@ HTTP endpoints (same origin, DSH auth):
 
 ```bash
 GET /token-cost/export?dataset=daily&scope=7d&format=csv
-GET /token-cost/export?dataset=sessions&scope=30d&format=json
-GET /token-cost/export?dataset=models&scope=all&format=csv
+GET /token-cost/export?dataset=sessions&scope=month&format=json
+GET /token-cost/export?dataset=models&scope=year&format=csv
 ```
 
 ### CLI

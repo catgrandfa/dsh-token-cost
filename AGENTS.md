@@ -5,7 +5,8 @@
 ## 这个项目是什么
 
 DSH（DeepSeek Harness）的 Token 花费面板插件：三视图（总览 / 明细 / 导出）、
-峰谷计价、预算 / 余额、按模型与会话明细、CSV·JSON 导出、独立 CLI 报表。
+无预算模式（只记录花费）、侧栏今日花费预览、自然月 / 季度 / 年统计、峰谷计价、
+按模型与会话明细、CSV·JSON 导出、独立 CLI 报表。
 本仓库派生自 [`dsh-token-meter-panel`](https://github.com/olimc2016/dsh-token-meter-panel) 0.6.7（MIT），
 版本从 0.1.0 起算。**金额是本机估算，不是官方账单。**
 

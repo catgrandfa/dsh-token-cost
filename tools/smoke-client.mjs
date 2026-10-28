@@ -105,3 +105,7 @@ try {
   console.log('panel first render (loading state) ->', String(error?.message ?? error));
 }
 console.log('\nCLIENT SMOKE OK');
+// 侧栏预览会起 setInterval：测试结束前释放所有 effect，避免 Node 因定时器不退出
+for (const effect of effects) {
+  try { effect.dispose?.(); } catch { /* ignore */ }
+}
