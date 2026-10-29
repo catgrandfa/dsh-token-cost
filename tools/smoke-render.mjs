@@ -280,6 +280,26 @@ try {
           console.error('FAIL: 今日含 API Key/第三方时来源徽标没有标「官方 + 本机」');
           process.exit(1);
         }
+        // 新的阅读顺序：今天 → 更长时间 → 趋势 → 构成 → 参考（数据源与口径）
+        for (const key of ['amountsTitle', 'dataSources', 'settingsStored']) {
+          if (!seenText.has(key)) {
+            console.error(`FAIL: 重排后的概览缺少区块「${key}」`);
+            process.exit(1);
+          }
+        }
+        // hero 状态块与底部快捷入口必须在（删掉编辑入口/快捷入口时这里变红）
+        for (const key of ['budgetUsed', 'monthBudget', 'balance']) {
+          if (![...seenText].some((line) => line.includes(key))) {
+            console.error(`FAIL: hero 状态块缺少「${key}」`);
+            process.exit(1);
+          }
+        }
+        for (const key of ['tabDetail →', 'tabExport →']) {
+          if (![...seenText].some((line) => line.includes(key))) {
+            console.error(`FAIL: 数据源卡缺少「${key}」快捷入口`);
+            process.exit(1);
+          }
+        }
       }
     }
   }

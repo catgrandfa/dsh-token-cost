@@ -60,7 +60,7 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 
 | View | Content |
 |---|---|
-| **Overview** | Today's spend (official vs mixed badge), vs yesterday, projection, daily / monthly budget, balance, 7/30-day and **month / quarter / year** totals, channel split (account quota / API key / third-party, plus a separately billed Search tool-call row), four token stats, hit rate, cost per call, peak/off-peak prices, 30-day **line trend** (hover for exact values), hourly distribution (**cost / token views**, hover per hour), live session usage |
+| **Overview** | One scrolling story: **Today** (spend + budget/balance status + channel amounts) → **Longer windows** (7/30-day, month / quarter / year, lifetime) → **Trend & hourly** (full-width line + 24-hour bars, hover for exact values, cost / token views) → **Composition** (channel split, token stats / hit rate / cost per call / token mix) → **Billing reference** (peak/off-peak table, data sources, links to breakdown/export), live session usage |
 | **Breakdown** | Today / 7d / 30d / month / quarter / year switch; per-model (including GLM / Kimi) spend and share, per-session table (search, subagent tag), per-provider totals, cost composition, **daily history** |
 | **Export** | Daily / sessions / models × today / 7d / 30d / month / quarter / year / all × CSV / JSON, one-click download; CLI and HTTP examples |
 

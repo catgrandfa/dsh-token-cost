@@ -39,7 +39,7 @@ console.log('factory type:', typeof captured.factory);
 const stubReact = {
   createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }),
   useState: (init) => [typeof init === 'function' ? init() : init, () => {}],
-  useEffect: () => {},
+  useEffect: () => {}, useLayoutEffect: () => {},
   useRef: (v) => ({ current: v }),
   useMemo: (fn) => fn(),
   useCallback: (fn) => fn,

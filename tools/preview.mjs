@@ -295,7 +295,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.9', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.10', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },
