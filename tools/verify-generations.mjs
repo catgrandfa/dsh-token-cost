@@ -74,6 +74,11 @@ try {
     const day = Object.values(data.days)[0];
     check('byHourCny 落在调用发生的 10 点', Number((day.byHourCny?.[10] ?? 0).toFixed(2)), 5.02);
     check('byHourCny 其余小时为 0', Number(day.byHourCny.filter((v, h) => h !== 10).reduce((a, v) => a + v, 0).toFixed(6)), 0);
+    // 渠道拆分：deepseek-official 属 API Key 渠道；账号额度渠道应为空
+    const apiKeyDay = Object.values(data.daysApiKey ?? {})[0];
+    check('API Key 渠道落在调用发生的 10 点', Number((apiKeyDay?.byHourCny?.[10] ?? 0).toFixed(2)), 5.02);
+    check('账号额度渠道为空', Object.keys(data.daysAccount ?? {}).length, 0);
+    check('第三方渠道为空', Object.keys(data.daysThirdParty ?? {}).length, 0);
   }
 
   console.log('-- 2) v3 + v4：必须只取 v4（v3 是过期快照，取 v3 就会丢新用量）');
@@ -179,6 +184,7 @@ try {
     const reusedHourCny = Object.values(second.days)
       .reduce((sum, d) => sum + (d.byHourCny ?? []).reduce((acc, v) => acc + v, 0), 0);
     check('复用后 byHourCny 非 0', reusedHourCny > 0, true);
+    check('复用后 daysApiKey 一致', JSON.stringify(Object.values(second.daysApiKey ?? {})), JSON.stringify(Object.values(first.daysApiKey ?? {})));
 
     // 只动一个文件：只有它需要重算
     writeLog(join(dir2, 'session.v4.jsonl.zstd'), [a, a, a, a]);

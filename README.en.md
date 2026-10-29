@@ -67,14 +67,15 @@ DSH records token usage in session logs but **does not price it**. This plugin t
 More:
 
 - **GLM / Kimi support**: third-party routes (pi-ai etc.) are included by default and priced by model id from official GLM / Kimi rates; unknown models are counted but never guessed
+- **Non-account spend is counted**: the official usage API only covers account quota; **API-key charges and third-party routes** are estimated from local session logs and included in today / trend / window totals (shown as channel rows in the header and the channel-split card, summing to today's spend)
 - **No-budget mode**: budget defaults to `0` — record spend without progress bars or alerts; click to set one
 - **Sidebar preview**: the entry shows `Token · ¥9.87` (expanded text and collapsed tooltip)
 - **Hover for exact values**: the trend line and 24-hour bars show a floating tooltip with cost, exact token counts and hit / miss / output breakdown; a **cost / token** switch next to the title re-scales both charts
 - **Peak / off-peak pricing**: Beijing time Mon–Fri 09:00–12:00 and 14:00–18:00, computed per tier then summed
-- **Official cross-check**: optional DeepSeek account session or `platform.deepseek.com` web login
+- **Official cross-check**: optional DeepSeek account session or `platform.deepseek.com` web login; account-quota daily amounts match the platform usage page
 - **Search tool-call fee**: a separate row in the channel split card, estimated from successful `web_search` calls (CNY 5 per 1,000 requests, billed from 2026-11-01; free before) and **not** added to token totals
 - **Balance**: DSH account or `DEEPSEEK_API_KEY`; the account path also exposes lifetime spend
-- **Edit settings in the panel**: click the budget / low-balance hint to write the value back
+- **Edit settings in the panel**: click the budget / monthly budget / low-balance hint to change it — **saved to the plugin's local config** (`$DSH_HOME/token-cost/settings.json`), effective immediately and after a DSH restart (the alert line is read-only for now; set it in the plugin config)
 - **Skins**: `default` (follows DSH theme) / `glass`
 - **Zero-config**: no API key and no external decompressor needed
 

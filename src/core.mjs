@@ -356,6 +356,9 @@ function contributionOf(records, opts, f) {
   const days = new Map();
   // 非 DeepSeek 官方 provider 的按天贡献；宿主用它把「官方用量」与「第三方用量」合并展示
   const daysThirdParty = new Map();
+  // 官方 provider 再按计费渠道拆开：账号额度（deepseek-account）/ API Key（其余官方 provider）
+  const daysAccount = new Map();
+  const daysApiKey = new Map();
   // 工具调用（Search）按天：{ calls, cny }。官方按成功请求单独计费，
   // 本地只能数到工具调用次数（没有服务端请求数），且 2026-11-01 之前免费。
   const searchDays = new Map();
@@ -436,6 +439,11 @@ function contributionOf(records, opts, f) {
     if (!official) {
       if (!daysThirdParty.has(dk)) daysThirdParty.set(dk, blankBucket());
       accumulate(daysThirdParty.get(dk), got.usage, model, got.time, cost);
+    } else {
+      // 账号额度 vs API Key：官方用量接口只覆盖账号额度，API Key 只能靠本机日志估算
+      const channel = provider === 'deepseek-account' ? daysAccount : daysApiKey;
+      if (!channel.has(dk)) channel.set(dk, blankBucket());
+      accumulate(channel.get(dk), got.usage, model, got.time, cost);
     }
 
     const mk = `${provider} | ${model}`;
@@ -451,7 +459,7 @@ function contributionOf(records, opts, f) {
     providers.set(provider, pt);
   }
   bucket.isSubagent = bucket.delegationDepth > 0;
-  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, daysThirdParty, searchDays, models, dayModels, providers, calls, unpriced };
+  return { key: `${f.workspace}/${f.sessionId}`, session: bucket, days, daysThirdParty, daysAccount, daysApiKey, searchDays, models, dayModels, providers, calls, unpriced };
 }
 
 /**
@@ -537,6 +545,11 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
 
   const days = new Map();
   const daysThirdParty = new Map();
+  // 官方渠道再按「账号额度 / API Key」拆开：浏览器半侧做「渠道拆分」和宿主合并都要用。
+  // 官方账号用量接口（platform .../usage/by_api_key，账号会话鉴权）实测只覆盖账号额度，
+  // API Key 扣费不在里面 —— 所以宿主合并时要把本机 API Key 估算补上（见 lib/index.js）。
+  const daysAccount = new Map();
+  const daysApiKey = new Map();
   // 工具调用（Search）按天：{ calls, cny }，与 token 金额分开统计
   const searchDays = new Map();
   const sessions = new Map();
@@ -558,6 +571,14 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     for (const [k, v] of c.daysThirdParty ?? []) {
       if (!daysThirdParty.has(k)) daysThirdParty.set(k, blankBucket());
       mergeBucket(daysThirdParty.get(k), v);
+    }
+    for (const [k, v] of c.daysAccount ?? []) {
+      if (!daysAccount.has(k)) daysAccount.set(k, blankBucket());
+      mergeBucket(daysAccount.get(k), v);
+    }
+    for (const [k, v] of c.daysApiKey ?? []) {
+      if (!daysApiKey.has(k)) daysApiKey.set(k, blankBucket());
+      mergeBucket(daysApiKey.get(k), v);
     }
     for (const [k, v] of c.searchDays ?? []) {
       const cur = searchDays.get(k) ?? { calls: 0, cny: 0 };
@@ -629,6 +650,9 @@ export function aggregate(sessionsRoot, { rates = PRICE_TIERS, includeOtherProvi
     days: Object.fromEntries([...days.entries()].map(([k, v]) => [k, packBucket(v)])),
     // 非 DeepSeek 官方 provider 的按天贡献（宿主与官方用量合并时用）
     daysThirdParty: Object.fromEntries([...daysThirdParty.entries()].map(([k, v]) => [k, packBucket(v)])),
+    // 官方渠道按计费渠道拆分（宿主合并、面板来源标注用）
+    daysAccount: Object.fromEntries([...daysAccount.entries()].map(([k, v]) => [k, packBucket(v)])),
+    daysApiKey: Object.fromEntries([...daysApiKey.entries()].map(([k, v]) => [k, packBucket(v)])),
     // 工具调用（Search）单独计费：按北京日期 { calls, cny }，不并入 token 金额
     daysSearch: Object.fromEntries([...searchDays.entries()].map(([k, v]) => [k, {
       calls: v.calls,

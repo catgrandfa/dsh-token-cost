@@ -62,7 +62,18 @@ const READY = {
   },
   official: {
     ok: true, auth: 'account', requests: 187, cny: 2.01, yesterdayCny: 9.6,
-    days: { '2026-10-15': 2.01, '2026-10-14': 9.6 },
+    // 与真实 payload 同形：日期 → {cny,hit,miss,out,requests}（渠道卡近 30 天金额会读 cny/hit/miss/out）
+    days: {
+      '2026-10-15': { cny: 2.01, hit: 41e6, miss: 2.5e5, out: 2.3e5, requests: 187 },
+      '2026-10-14': { cny: 9.6, hit: 10e6, miss: 1e6, out: 1e6, requests: 90 },
+    },
+  },
+  // 今日金额拆渠道（头部渠道行 / 来源徽标 / 分时来源都会读）
+  localChannels: { apiKey: true, third: true },
+  dayChannels: {
+    account: { cny: 1.2, tokens: 26e6, calls: 120 },
+    apiKey: { cny: 0.4, tokens: 15e6, calls: 67 },
+    third: { cny: 0.4, tokens: 1.2e6, calls: 5 },
   },
   sessions: [{ id: 's1', title: '会话', cny: 1.2, calls: 20, hit: 3e6, miss: 1e4, out: 2e4, at: Date.now(), isSubagent: false }],
 };
@@ -77,6 +88,32 @@ const NO_HOUR = {
   ...READY,
   days: {
     '2026-10-15': { ...READY.days['2026-10-15'], byHourCny: undefined, byHour: new Array(24).fill(0) },
+  },
+};
+/** 历史用过 API Key/第三方，但今天纯账号额度：徽标应显示「官方」而不是「官方 + 本机」 */
+const HISTORY_ONLY_LOCAL = {
+  ...READY,
+  localChannels: { apiKey: true, third: true },
+  dayChannels: {
+    account: { cny: 2.01, tokens: 41e6, calls: 187 },
+    apiKey: { cny: 0, tokens: 0, calls: 0 },
+    third: { cny: 0, tokens: 0, calls: 0 },
+  },
+};
+
+/** 官方账号有金额，但本机日志里没有 account 行（多设备同账号 / 清过 sessions）：
+ *  渠道卡必须补出「账号额度」行，否则各行相加 ≠ 头部金额 */
+const NO_ACCOUNT_ROW = {
+  ...READY,
+  dayModels: {
+    '2026-10-15|deepseek-official | deepseek-flash': { hit: 26e6, miss: 1.6e5, out: 1.5e5, calls: 120, cny: 1.15 },
+    '2026-10-15|pi-ai | glm-5.3': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4 },
+  },
+  localChannels: { apiKey: true, third: true },
+  dayChannels: {
+    account: { cny: 2.01, tokens: 41e6, calls: 187 },
+    apiKey: { cny: 1.15, tokens: 26e6, calls: 120 },
+    third: { cny: 0.4, tokens: 1.2e6, calls: 5 },
   },
 };
 let ACTIVE = READY;
@@ -232,6 +269,17 @@ try {
             process.exit(1);
           }
         }
+        // 头部渠道拆分行：账号额度 / API Key 两个标签 + 金额拼在同一行
+        const channelLine = [...seenText].find((line) => line.includes('accountQuota ¥') && line.includes('apiKeyQuota ¥'));
+        if (!channelLine) {
+          console.error('FAIL: 头部没有按渠道拆出账号额度 / API Key 金额');
+          process.exit(1);
+        }
+        // 今天含本机估算 → 徽标「官方 + 本机」
+        if (!seenText.has('mixedShort')) {
+          console.error('FAIL: 今日含 API Key/第三方时来源徽标没有标「官方 + 本机」');
+          process.exit(1);
+        }
       }
     }
   }
@@ -277,6 +325,22 @@ try {
     process.exit(1);
   }
   FORCED_HOVER = null;
+  // 今天纯账号额度（历史有 API Key）：徽标不能标「官方 + 本机」
+  ACTIVE = HISTORY_ONLY_LOCAL;
+  FORCED_VIEW = 'overview';
+  runWalk();
+  if (seenText.has('mixedShort')) {
+    console.error('FAIL: 今天纯账号额度时来源徽标仍标了「官方 + 本机」（用了全局 localChannels）');
+    process.exit(1);
+  }
+  // 官方账号行缺失时必须补出来：渠道卡里要能看到 accountQuota 行
+  ACTIVE = NO_ACCOUNT_ROW;
+  FORCED_VIEW = 'overview';
+  runWalk();
+  if (!seenText.has('accountQuota')) {
+    console.error('FAIL: 官方账号有金额但本机无 account 行时，渠道卡没有补出「账号额度」行');
+    process.exit(1);
+  }
   ACTIVE = READY;
   // 首屏 loading（骨架屏）分支
   FORCED_LOADING = true;

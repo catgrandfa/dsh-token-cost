@@ -4,9 +4,12 @@
  * 需要能解析 @deepseek-ai/schemastery —— 本机解析不到时会退化成「无 schema」，仍可跑完。
  * 另外覆盖两条余额路径（账号 / API Key）与两种桌面布局的更新通道解析（macOS / Windows）。
  */
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+/** 本次烟测的插件本机设置文件：别碰真实的 ~/.dsh/token-cost 配置 */
+const SMOKE_SETTINGS = join(tmpdir(), `dsh-token-cost-settings-${process.pid}.json`);
 
 // 用相对本文件的路径，别写死任何人的机器路径；URL 本身就是合法的 import specifier
 const target = new URL('../lib/index.js', import.meta.url).href;
@@ -88,7 +91,7 @@ const ctx = {
   effect(cb, label) { effects.push({ label, dispose: cb() }); return { dispose() {} }; },
 };
 
-await mod.apply(ctx, {});
+await mod.apply(ctx, { settingsPath: SMOKE_SETTINGS });
 // 设置 namespace 的注册要等 schemastery 动态导入完成，让出一个 tick 再看结果
 await new Promise((resolve) => setTimeout(resolve, 50));
 console.log('\n--- registered routes ---');
@@ -382,7 +385,8 @@ async function callRoute(ctxRoutes, path, url, method = 'GET') {
   console.log(`  ${quarterOk ? 'PASS' : 'FAIL'} 自然季度 CSV 下载头`);
   if (!quarterOk) smokeFailures += 1;
 
-  // 面板内把预算写回设置：POST /settings 接受 monthlyBudget
+  // 面板内改预算：POST /settings 写插件本机配置文件（当前 DSH 没有 settings.register，
+  // 写 DSH 设置这条路走不通；这里验证文件落盘 + 新实例（模拟重启）能读到）。
   const settingsRoute = routes.find((r) => r.path.endsWith('/settings'));
   let postBody = '', postStatus = 0;
   const req = {
@@ -394,10 +398,88 @@ async function callRoute(ctxRoutes, path, url, method = 'GET') {
     },
   };
   await settingsRoute.handler(req, { writeHead: (s) => { postStatus = s; }, end: (b) => { postBody = b; } });
+  let saved = null;
+  try { saved = JSON.parse(readFileSync(SMOKE_SETTINGS, 'utf8')); } catch { saved = null; }
   const postOk = postStatus === 200 && JSON.parse(postBody)?.ok === true
-    && settingStore.updated?.monthlyBudget === 300 && settingStore.updated?.dailyBudget === 60;
-  console.log(`  ${postOk ? 'PASS' : 'FAIL'} 面板内写回预算：${JSON.stringify(settingStore.updated)}`);
+    && saved?.monthlyBudget === 300 && saved?.dailyBudget === 60;
+  console.log(`  ${postOk ? 'PASS' : 'FAIL'} 面板内写回预算（本机文件）：${JSON.stringify(saved)}`);
   if (!postOk) smokeFailures += 1;
+
+  // GET 能读回；新实例（重启 DSH）仍按文件里的预算出数
+  let getBody = '';
+  await settingsRoute.handler({ method: 'GET' }, { writeHead() {}, end: (b) => { getBody = b; } });
+  const getOk = JSON.parse(getBody)?.data?.editable?.dailyBudget === 60
+    && JSON.parse(getBody)?.data?.editable?.monthlyBudget === 300;
+  console.log(`  ${getOk ? 'PASS' : 'FAIL'} 面板读取生效预算：${JSON.stringify(JSON.parse(getBody)?.data?.editable)}`);
+  if (!getOk) smokeFailures += 1;
+  // 非法输入必须明确报错，不能把负数写进配置
+  let badStatus = 0, badBody = '';
+  const badReq = {
+    method: 'POST',
+    on(event, cb) {
+      if (event === 'data') cb(JSON.stringify({ dailyBudget: -1 }));
+      if (event === 'end') cb();
+      return this;
+    },
+  };
+  await settingsRoute.handler(badReq, { writeHead: (s) => { badStatus = s; }, end: (b) => { badBody = b; } });
+  const badBudgetOk = badStatus === 400 && JSON.parse(badBody)?.ok === false;
+  console.log(`  ${badBudgetOk ? 'PASS' : 'FAIL'} 非法预算被拒：${badStatus} ${JSON.parse(badBody)?.error}`);
+  if (!badBudgetOk) smokeFailures += 1;
+  // 告警线 0 是合法值，不能被 || 80 吞掉
+  const zeroReq = {
+    method: 'POST',
+    on(event, cb) {
+      if (event === 'data') cb(JSON.stringify({ alertAtPercent: 0 }));
+      if (event === 'end') cb();
+      return this;
+    },
+  };
+  await settingsRoute.handler(zeroReq, { writeHead() {}, end() {} });
+  let zeroBody = '';
+  await settingsRoute.handler({ method: 'GET' }, { writeHead() {}, end: (b) => { zeroBody = b; } });
+  const zeroOk = JSON.parse(zeroBody)?.data?.editable?.alertAtPercent === 0;
+  console.log(`  ${zeroOk ? 'PASS' : 'FAIL'} 告警线 0 被保留：alertAtPercent=${JSON.parse(zeroBody)?.data?.editable?.alertAtPercent}`);
+  if (!zeroOk) smokeFailures += 1;
+  {
+    const { ctx: ctxS, routes: rS } = newCtx();
+    await mod.apply(ctxS, { sessionsRoot: join(tmpdir(), `dsh-token-cost-empty-${process.pid}`), settingsPath: SMOKE_SETTINGS });
+    const got = await callRoute(rS, '/summary', '/token-cost/summary?refresh=1');
+    const cfgOk = got.payload?.config?.dailyBudget === 60 && got.payload?.config?.monthlyBudget === 300
+      && got.payload?.config?.alertAtPercent === 0;
+    console.log(`  ${cfgOk ? 'PASS' : 'FAIL'} 重启后预算/告警线仍生效：daily=${got.payload?.config?.dailyBudget} monthly=${got.payload?.config?.monthlyBudget} alert=${got.payload?.config?.alertAtPercent}`);
+    if (!cfgOk) smokeFailures += 1;
+  }
+  rmSync(SMOKE_SETTINGS, { force: true });
+
+  // 写失败路径：设置文件的父路径是普通文件（mkdir/rename 必失败）→ 400，且不能"内存里生效"
+  {
+    const blocked = join(tmpdir(), `dsh-token-cost-blocked-${process.pid}`);
+    writeFileSync(blocked, 'x');
+    try {
+      const { ctx: ctxF, routes: rF } = newCtx();
+      await mod.apply(ctxF, { sessionsRoot: join(tmpdir(), `dsh-token-cost-empty-${process.pid}`), settingsPath: join(blocked, 'settings.json') });
+      const routeF = rF.find((r) => r.path.endsWith('/settings'));
+      let failStatus = 0, failBody = '';
+      const failReq = {
+        method: 'POST',
+        on(event, cb) {
+          if (event === 'data') cb(JSON.stringify({ dailyBudget: 99 }));
+          if (event === 'end') cb();
+          return this;
+        },
+      };
+      await routeF.handler(failReq, { writeHead: (s) => { failStatus = s; }, end: (b) => { failBody = b; } });
+      let afterBody = '';
+      await routeF.handler({ method: 'GET' }, { writeHead() {}, end: (b) => { afterBody = b; } });
+      const failOk = failStatus === 400 && JSON.parse(failBody)?.ok === false
+        && JSON.parse(afterBody)?.data?.editable?.dailyBudget === 0;
+      console.log(`  ${failOk ? 'PASS' : 'FAIL'} 设置写失败 → 400 且不生效：status=${failStatus} editable.dailyBudget=${JSON.parse(afterBody)?.data?.editable?.dailyBudget}`);
+      if (!failOk) smokeFailures += 1;
+    } finally {
+      rmSync(blocked, { force: true });
+    }
+  }
 }
 
 // 卸载：disposer 应把路由摘干净
@@ -435,19 +517,25 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
       return { ok: true, status: 200, json: async () => ({ code: 0, data: { biz_code: 0, biz_data: bizData } }) };
     };
     const fmtY = (v) => Number(v ?? 0).toFixed(2);
-    // 会话目录里放一条第三方（pi-ai）调用：验证「官方按小时金额 + 第三方本地花费」同一天合并
+    // 会话目录里放三条调用，分别验证三条渠道的合并：
+    //  3 点 pi-ai（第三方，GLM 1M miss = ¥8）
+    //  4 点 deepseek-official（API Key，1M miss 空闲档 = ¥1 → 用 8M 让它等于 ¥8）
+    //  2 点 deepseek-account（本机账号日志，官方接口已覆盖 → 绝不能再加一遍）
     const root = join(tmpdir(), `dsh-token-cost-official-${process.pid}`);
     const sessionDir = join(root, 'ws-official', 'sess-official');
     mkdirSync(sessionDir, { recursive: true });
-    writeFileSync(join(sessionDir, 'session.jsonl'), [
-      { type: 'session', id: 'sess-official', createdAt: dayStartSec * 1000 + 3 * 3600e3, delegationDepth: 0 },
-      {
-        type: 'assistant/message', time: dayStartSec * 1000 + 3 * 3600e3 + 60e3,
-        data: {
-          usage: { inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0 },
-          message: { source: { provider: 'pi-ai', model: 'glm-5.3' } },
-        },
+    const mkCall = (hour, provider, model, inputTokens) => ({
+      type: 'assistant/message', time: dayStartSec * 1000 + hour * 3600e3 + 60e3,
+      data: {
+        usage: { inputTokens, cacheReadTokens: 0, outputTokens: 0 },
+        message: { source: { provider, model } },
       },
+    });
+    writeFileSync(join(sessionDir, 'session.jsonl'), [
+      { type: 'session', id: 'sess-official', createdAt: dayStartSec * 1000 + 3600e3, delegationDepth: 0 },
+      mkCall(2, 'deepseek-account', 'deepseek-flash', 1_000_000),
+      mkCall(3, 'pi-ai', 'glm-5.3', 1_000_000),
+      mkCall(4, 'deepseek-official', 'deepseek-flash', 8_000_000),
     ].map((r) => JSON.stringify(r)).join('\n'));
     try {
       const { ctx: ctxG, routes: rG } = newCtx({
@@ -466,18 +554,25 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
       const ok = off.ok === true && off.auth === 'account' && hits.length > 0 && hits.every((h) => h === 'acct-session-token');
       console.log(`  ${ok ? 'PASS' : 'FAIL'} official.ok=${off.ok} auth=${off.auth} reason=${off.reason ?? '-'} 请求数=${hits.length}`);
       if (!ok) smokeFailures += 1;
-      // 分时花费：官方按小时金额优先（9 点 0.5 + 10 点 4.52），第三方本地花费按自己的小时并入；
-      // 分时合计必须等于合并后的当日花费（官方 5.02 + GLM 第三方）。
+      // 分时花费按渠道合并：官方账号按小时金额（9 点 0.5 + 10 点 4.52）
+      // + 本机 API Key（4 点 ¥8）+ 本机第三方（3 点 ¥8）。
+      // 2 点的 deepseek-account 本机日志必须被官方覆盖、不能重复加。
       const today = got.payload?.days?.[got.payload?.today];
       const hourCny = today?.byHourCny ?? [];
       const hourSum = hourCny.reduce((a, v) => a + v, 0);
-      const thirdCny = Number(((today?.cny ?? 0) - 5.02).toFixed(6));
+      const channels = got.payload?.dayChannels ?? {};
       const adoptOk = Array.isArray(off.byHourCny)
         && Math.abs((hourCny[9] ?? 0) - 0.5) < 1e-6
         && Math.abs((hourCny[10] ?? 0) - 4.52) < 1e-6
-        && Math.abs((hourCny[3] ?? 0) - thirdCny) < 0.01
-        && Math.abs(hourSum - (today?.cny ?? 0)) < 0.01;
-      console.log(`  ${adoptOk ? 'PASS' : 'FAIL'} 官方按小时金额 + 第三方合并：9点=¥${fmtY(hourCny[9])} 10点=¥${fmtY(hourCny[10])} 3点(第三方)=¥${fmtY(hourCny[3])} 合计=¥${fmtY(hourSum)}（当日 ¥${fmtY(today?.cny)}）`);
+        && Math.abs((hourCny[3] ?? 0) - 8) < 0.01
+        && Math.abs((hourCny[4] ?? 0) - 8) < 0.01
+        && Math.abs(hourCny[2] ?? 0) < 1e-9
+        && Math.abs((today?.cny ?? 0) - 21.02) < 0.01
+        && Math.abs(hourSum - (today?.cny ?? 0)) < 0.01
+        && Math.abs((channels.account?.cny ?? 0) - 5.02) < 1e-6
+        && Math.abs((channels.apiKey?.cny ?? 0) - 8) < 0.01
+        && Math.abs((channels.third?.cny ?? 0) - 8) < 0.01;
+      console.log(`  ${adoptOk ? 'PASS' : 'FAIL'} 三渠道合并：账号(官方)=¥${fmtY(channels.account?.cny)} APIKey(本机)=¥${fmtY(channels.apiKey?.cny)} 第三方=¥${fmtY(channels.third?.cny)} 当日=¥${fmtY(today?.cny)}；分时 9点=¥${fmtY(hourCny[9])} 10点=¥${fmtY(hourCny[10])} 3点=¥${fmtY(hourCny[3])} 4点=¥${fmtY(hourCny[4])} 2点(应忽略)=¥${fmtY(hourCny[2])} 合计=¥${fmtY(hourSum)}`);
       if (!adoptOk) smokeFailures += 1;
     } catch (error) {
       console.log(`  FAIL 官方用量（账号会话）：${error?.message ?? error}`);

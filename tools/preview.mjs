@@ -150,13 +150,21 @@ function demoData() {
     };
     sessMs -= 3 * 3600e3;
   });
-  // 官方用量接口只返回最近 30 天：演示数据也照实模拟，宽窗口（月/季/年）由本地 days 提供
+  // 官方用量接口只返回最近 30 天：演示数据也照实模拟，宽窗口（月/季/年）由本地 days 提供。
+  // 官方账号接口只覆盖账号额度：演示里按 65% 账号 / 35% API Key 拆（与渠道拆分卡的 65%/35% 一致）。
+  const ACCOUNT_SHARE = 0.65;
   const officialDays = {};
   for (let i = 0; i < 30; i += 1) {
     const key = keyOf(now - i * 86400000);
     const value = days[key];
     if (!value) continue;
-    officialDays[key] = { cny: value.cny, hit: value.hit, miss: value.miss, out: value.out, requests: value.calls };
+    officialDays[key] = {
+      cny: Number((value.cny * ACCOUNT_SHARE).toFixed(6)),
+      hit: Math.round(value.hit * ACCOUNT_SHARE),
+      miss: Math.round(value.miss * ACCOUNT_SHARE),
+      out: Math.round(value.out * ACCOUNT_SHARE),
+      requests: Math.round(value.calls * ACCOUNT_SHARE),
+    };
   }
   // 第三方（pi-ai → GLM / Kimi）：官方用量接口看不到这部分，宿主会把它与官方天数合并
   const thirdParty = { calls: 0, tokens: 0, cny: 0 };
@@ -210,6 +218,32 @@ function demoData() {
   const deepseekCny = Number((Object.values(days).reduce((sum, day) => sum + day.cny, 0) - thirdParty.cny).toFixed(6));
   const accountShare = 0.65;
   const accountCny = Number((deepseekCny * accountShare).toFixed(6));
+  // 今日消费拆渠道：账号额度（官方）+ API Key / 第三方（本机估算）
+  const todayPart = (matchProvider) => {
+    let cny = 0, tokens = 0, calls = 0;
+    for (const [key, value] of Object.entries(dayModels)) {
+      const bar = key.indexOf('|');
+      if (bar < 0 || key.slice(0, bar) !== todayKey) continue;
+      const rest = key.slice(bar + 1);
+      const sep = rest.indexOf(' | ');
+      const provider = sep >= 0 ? rest.slice(0, sep) : rest;
+      if (!matchProvider(provider)) continue;
+      cny += Number(value.cny ?? 0);
+      tokens += (value.hit ?? 0) + (value.miss ?? 0) + (value.out ?? 0);
+      calls += value.calls ?? 0;
+    }
+    return { cny: Number(cny.toFixed(6)), tokens, calls };
+  };
+  const todayOfficial = officialDays[todayKey] ?? { cny: 0, hit: 0, miss: 0, out: 0, requests: 0 };
+  const dayChannels = {
+    account: {
+      cny: Number(todayOfficial.cny ?? 0),
+      tokens: (todayOfficial.hit ?? 0) + (todayOfficial.miss ?? 0) + (todayOfficial.out ?? 0),
+      calls: todayOfficial.requests ?? 0,
+    },
+    apiKey: todayPart((provider) => provider === 'deepseek-official'),
+    third: todayPart((provider) => provider !== 'deepseek-official' && provider !== 'deepseek-account'),
+  };
 
   return {
     summary: {
@@ -252,6 +286,8 @@ function demoData() {
         days: officialDays, fetchedAt: now,
       },
       meterSource: 'mixed',
+      localChannels: { apiKey: true, third: true },
+      dayChannels,
       billingUrl: 'https://platform.deepseek.com/usage',
       config: {
         dailyBudget: 50, monthlyBudget: 300, lowBalanceAlert: 20, alertAtPercent: 80,
@@ -259,7 +295,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.8', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.9', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },

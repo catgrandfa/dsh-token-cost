@@ -24,6 +24,18 @@ if (hourCostBad.length) {
   process.exit(1);
 }
 console.log('hour-cost invariant OK（每天 byHourCny 之和 = 当日 cny）');
+// 渠道不变量：账号额度 + API Key + 第三方 = 当天全部花费（每条调用只归一个渠道）
+const channelBad = Object.entries(data.days).filter(([day, e]) => {
+  const account = data.daysAccount?.[day]?.cny ?? 0;
+  const apiKey = data.daysApiKey?.[day]?.cny ?? 0;
+  const third = data.daysThirdParty?.[day]?.cny ?? 0;
+  return Math.abs(account + apiKey + third - e.cny) > Math.max(0.005, e.cny * 1e-3);
+});
+if (channelBad.length) {
+  console.error(`FAIL: 渠道金额之和与当日金额不一致: ${channelBad.map(([day, e]) => `${day} channel=${(((data.daysAccount?.[day]?.cny ?? 0) + (data.daysApiKey?.[day]?.cny ?? 0) + (data.daysThirdParty?.[day]?.cny ?? 0))).toFixed(4)} cny=${e.cny.toFixed(4)}`).join('; ')}`);
+  process.exit(1);
+}
+console.log('channel invariant OK（账号额度 + API Key + 第三方 = 当日 cny）');
 console.log('\n-- providers --');
 console.log(`  （计费口径：${OFFICIAL_PROVIDERS.join(' / ')}，其他 provider 只记 token）`);
 for (const [p, v] of Object.entries(data.providers)) {
