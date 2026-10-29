@@ -84,19 +84,19 @@ and this repository records none."*
 再把 catalog 以 `YYYY.MDD.RUN` 版本发布到 npm 包 `dsh-plugin-catalog`（用户拿到的是每日快照）。
 `dsh-market`（`dsh plugin --profile web add dshmarket`）内置这份列表，几个第三方客户端也内置它。
 
-## 三、本仓库现状对照（2026-10-28 18:00 CST）
+## 三、本仓库现状对照（2026-10-29 09:05 CST）
 
 | 要求 | 现状 | 能过吗 |
 |---|---|---|
 | `dsh.bundle` manifest | `package.json` 有 `dsh.bundle.patch: ./cordis.patch.yml` | ✅ |
 | `cordis.patch.yml` | 有，row id `token-cost`（避开了内核的 `token-meter`） | ✅ |
-| 真实可用代码 + 能从 GitHub 安装 | desktop profile 已按 `github:catgrandfa/dsh-token-cost#v0.3.2` 安装成功 | ✅ |
+| 真实可用代码 + 能从 GitHub 安装 | desktop profile 已按 `github:catgrandfa/dsh-token-cost#v0.3.2` 安装成功；当前版本 0.3.7 | ✅ |
 | 仓库创建满 1 天 | 创建于 2026-10-28 09:03 UTC；**10-29 09:03 UTC（北京时间 17:03）后**才达标 | ⏳ |
 | `dsh-plugin` topic | 已有 9 个 topic，含硬要求 `dsh-plugin` 与相关性 topic（2026-10-28 18:20 设置并 API 复核） | ✅ |
 | 分类 | `usage`（该分类已有 392 条，约 125 条与 token/花费相关，其中同名 `dsh-token-cost` 已有 2 个别人的仓库） | ✅ 但描述要写清差异 |
 | 描述属实 | README 已如实写明派生自 `dsh-token-meter-panel`，并列出新增项 | ✅ 写条目时照实写 |
-| 预构建 tarball | 3 个 Release 但**都没有 assets**；`v0.3.2` 只有 tag 没有 Release | ⚠️ 可选，建议补 |
-| `screenshots.json` | 无（`docs/preview-*.png` 三张可直接用） | ⚠️ 可选，建议补 |
+| 预构建 tarball | ✅ `v0.3.7` Release 已挂 `dsh-token-cost.tgz`（735 KB，由 `.github/workflows/release-tarball.yml` 生成），URL 不带版本号、钉 tag | ✅ |
+| `screenshots.json` | ✅ 已加，三张 `docs/preview-*.png`（overview / detail / export），并进了 npm 包的 `files` | ✅ |
 | npm 包 | 未发布；且 npm 上 `dsh-token-cost` **已被别人占用**（2026-08-13 起） | ⚠️ 要发只能发 scope 包 |
 | GitHub star | 1（所有者自己 star，2026-10-28 已确认 `stargazerCount:1`）；`@1e0zj/dsh-plugin-mall` 一类工具设了 `stars:>=1` 的搜索下限 | ✅ 够过门槛，但排序仍垫底 |
 
@@ -122,11 +122,12 @@ awesome 官方索引的收录资格。
 1. ✅ **已完成 2026-10-28 18:12**：仓库 topic 现在是 `dsh-plugin`、`deepseek-harness`、`dsh`
    （`GET /repos/catgrandfa/dsh-token-cost` 已确认生效）。加完 dshfind 次日 02:17 UTC 自动收录，
    1024Store/mall 也会扫到；GitHub 搜索索引对 topic 变更通常有几分钟到几小时延迟。
-2. 加 `screenshots.json`（1–8 张，相对路径，指向仓库里已有的图）：
-   ```json
-   ["docs/preview-overview.png", "docs/preview-detail.png", "docs/preview-export.png"]
-   ```
-3. 可选：把 `v0.3.2` 的预构建包挂成 Release asset（`npm pack` 产物；asset 名不带版本号，或 URL 钉 tag）。
+2. ✅ **已完成 2026-10-28 19:2x**：`screenshots.json` 已加（三张 demo 预览图，路径相对该文件），
+   同时写进 `package.json` 的 `files`；提交 `chore: 收录准备 — screenshots.json 与 Release tarball 工作流`。
+3. ✅ **已完成 2026-10-29 01:02 UTC**：新增 `.github/workflows/release-tarball.yml`（手动触发），
+   已为 `v0.3.7` 生成 Release 并挂上 `dsh-token-cost.tgz`：
+   `https://github.com/catgrandfa/dsh-token-cost/releases/download/v0.3.7/dsh-token-cost.tgz`
+   资产名不带版本号、URL 钉 tag，所以以后发版不会 404；新版本换个 tag 再跑一次工作流即可。
 4. 确认 README 首段那句话能被直接当作 `description.en` 核验（功能、数字、命令都要真实）。
 5. 让仓库至少有 1 个 star：GitHub 允许所有者 star 自己的仓库，且这个 star 与别人的一样计入
    `stargazers_count`，所以自己 star 能过 `@1e0zj/dsh-plugin-mall` 的 `stars:>=1` 机械门槛
@@ -138,7 +139,7 @@ awesome 官方索引的收录资格。
 
 6. 提 PR：只加 `data/plugins/catgrandfa__dsh-token-cost.yml`（草稿见下节），category `usage`，
    中英描述如实写明与上游的差异（预算/月度预算、GLM/Kimi 按模型计价、季度/年统计、CSV/JSON 导出、CLI 报表）。
-   补了 Release tarball 就带 `tarball:`（钉 tag 最不容易烂）。
+   预构建 tarball 已经就绪，条目里直接带上 `tarball:`。
 7. 同日可选：PR 到 `imsai-sh/awesome-deepseek-harness-plugins` 的 `catalog/plugins/*.json`，
    自动合并后 1024Store 里会从 `unclassified` 升级成有分类、有双语描述的条目。
 8. 跟进：要求修改时维护者会打 `held: author`，在同一分支推修复 + 留一条评论即可；不要手工改 README。
@@ -162,8 +163,8 @@ category: usage
 description:
   en: "Token spend panel for DeepSeek Harness: today and 7/30-day totals, natural month/quarter/year sums, cost split by cache-hit input, cache-miss input and output, per-model and per-session detail, daily and monthly budgets with a projected day-end spend, peak/off-peak pricing, CSV and JSON export, and a zero-dependency CLI report. Also prices GLM (Zhipu) and Kimi models shipped through third-party routes."
   zh: "DSH 的 Token 花费面板：今日与近 7/30 天、自然月/季/年合计，按缓存命中输入、未命中输入与输出拆成本，按模型/会话明细，每日与月度预算加当日花费外推，峰谷分档计价，CSV/JSON 导出，另有零依赖 CLI 报表；同时按模型单价计 GLM（智谱）与 Kimi 等第三方路由。"
-# 可选：补了 Release 预构建包再加，钉 tag 的形式不会因为下次发版 404
-# tarball: https://github.com/catgrandfa/dsh-token-cost/releases/download/v0.3.2/dsh-token-cost.tgz
+# Release 预构建包已就绪；钉 tag + 不带版本号的文件名，下次发版不会 404
+tarball: https://github.com/catgrandfa/dsh-token-cost/releases/download/v0.3.7/dsh-token-cost.tgz
 ```
 
 `description.en` 含 `: ` 会破坏 YAML，所以整段加了引号；提交前在 awesome 仓库里 `npm ci` 后跑
@@ -183,9 +184,13 @@ description:
 - 2026-10-28 18:12 CST：用已登录的 Chrome 打开仓库页 →「Edit repository metadata」→ 设置 topics
   为 `dsh-plugin`、`deepseek-harness`、`dsh` → Save changes；API 复核 `topics` 已生效。
 - 2026-10-28 18:12 CST：仓库已有 1 个 star（所有者自己 star），满足 `stars:>=1` 类门槛。
-- 待办：`screenshots.json`、Release 预构建 tarball、明天 17:03 后的 awesome 单文件 PR。
 - 2026-10-28 18:20 CST：补相关性 topics，最终 9 个：`dsh-plugin`、`deepseek-harness`、`dsh`、
   `token-cost`、`token-usage`、`cost-tracking`、`llm-cost`、`deepseek`、`budget`。
   选择依据是 GitHub 上这些 topic 已有真实仓库沉淀（token-usage 1866、cost-tracking 1203、llm-cost 379、
   deepseek 14615、budget 1675），而 `csv`/`cli`/`dashboard` 这类太泛的没加，避免把 topic 做成关键词堆砌。
   **真正影响收录的仍然只有 `dsh-plugin`**：dshfind / 1024Store / mall 都只按这一个 topic 过滤。
+- 2026-10-28 19:23 CST：提交 `0603c43` 加 `screenshots.json`（并进 `package.json` 的 `files`）与
+  `.github/workflows/release-tarball.yml`；`5af7c77` 提交本笔记；已 push 到 `main`。
+- 2026-10-29 01:02 UTC：手动触发 `release-tarball` 工作流，30 秒内成功，`v0.3.7` Release 出现资产
+  `dsh-token-cost.tgz`（735,708 B）；同时 `test` 工作流在 push 后双平台跑过。
+- 待办：只剩仓库满 1 天（2026-10-29 09:03 UTC / 北京 17:03）后的 awesome 单文件 PR。
