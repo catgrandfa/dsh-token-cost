@@ -295,7 +295,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.10', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.11', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },
@@ -392,23 +392,32 @@ const html = `<!doctype html>
 <div id="stage"></div>
 <script>
 // ---- 极小 React 垫片：面板只用 createElement / useState / useEffect / useRef / useMemo / useCallback ----
+// useState 是响应式的（按调用序存状态，setter 触发整树重渲），预览页里可以直接演示点击 / 输入等交互；
+// 数据类状态（形如 {status, data}）仍固定为真实 payload，重渲后不会变成 loading。
+let __hookState = [];
+let __cursor = 0; // 本次渲染的 hook 游标：每次整树重渲前归零，useState 按调用序取槽位
+let __scheduled = false;
 const React = {
   createElement(type, props, ...children) {
     return { type, props: props || {}, children: children.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false) };
   },
-  // 预览用：数据类状态（形如 {status, data}）直接换成真实 payload，其余原样；
-  // 这样不需要真的跑 React 更新，就能把「有数据」的样子渲染出来。
   useState(init) {
-    // 视图切换：面板第一个字符串状态就是 view（初值 'overview'），预览时强制成目标视图
-    if (init === 'overview') return [${JSON.stringify(VIEW)}, () => {}];
-    const value = typeof init === 'function' ? init() : init;
-    if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
-      const summaryLike = value.status === 'loading' || value.status === 'failed';
-      return [summaryLike
-        ? { status: 'ready', data: DATA.summary, error: null, at: Date.now(), refresh: () => {} }
-        : { status: 'ready', data: DATA.balance, reload: () => {} }, () => {}];
+    const i = __cursor++;
+    if (!(i in __hookState)) {
+      let value = typeof init === 'function' ? init() : init;
+      // 视图切换：面板里唯一以 'overview' 为初值的状态就是 view，预览时强制成目标视图
+      if (init === 'overview') value = ${JSON.stringify(VIEW)};
+      else if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
+        value = (value.status === 'loading' || value.status === 'failed')
+          ? { status: 'ready', data: DATA.summary, error: null, at: Date.now(), refresh: () => {} }
+          : { status: 'ready', data: DATA.balance, reload: () => {} };
+      }
+      __hookState[i] = value;
     }
-    return [value, () => {}];
+    return [__hookState[i], (v) => {
+      __hookState[i] = typeof v === 'function' ? v(__hookState[i]) : v;
+      if (!__scheduled) { __scheduled = true; setTimeout(() => { __scheduled = false; __renderApp(); }, 0); }
+    }];
   },
   useEffect() {}, useLayoutEffect() {},
   useRef(v) { return { current: v }; },
@@ -446,6 +455,8 @@ function render(node, parent) {
     }
     else if (k === 'className') el.className = v;
     else if (k === 'key' || k === 'title') { if (k === 'title') el.title = v; }
+    else if (k === 'onChange' && typeof v === 'function') el.addEventListener('input', v); // React 的 onChange 对应原生 input 事件
+    else if (k === 'autoFocus') { if (v) setTimeout(() => { el.focus(); try { el.select(); } catch {} }, 0); } // 预览环境 focus 事件不派发，直接顺带全选
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (typeof v === 'boolean') { if (v) el.setAttribute(SVG_ATTRS[k] ?? k, ''); }
     else el.setAttribute(SVG_ATTRS[k] ?? k, v);
@@ -460,6 +471,7 @@ let panelComponent = null;
 let DICTS = { zh: {}, en: {} };
 window.__ModuleLoader__ = { load(entry) { const mod = entry.factory((n) => (n === 'react' ? React : {})); mod.apply({
   slots: {
+    // 注意：bundle 把 register('main', …) 写在 inject('main', …) 的回调里，inject 必须执行
     inject: (key, cb) => cb(),
     register: (spec, component) => { if (spec.name === 'main') panelComponent = component; return () => {}; },
   },
@@ -470,7 +482,28 @@ window.__ModuleLoader__ = { load(entry) { const mod = entry.factory((n) => (n ==
 <script>${bundle}</script>
 <script>
 const t = (k) => DICTS.zh[k] ?? k;
-render(panelComponent({ t, useProjection: undefined }), document.getElementById('stage'));
+// 预览里没有宿主后端：settings 保存直接回成功，其余请求走真 fetch
+const __realFetch = window.fetch.bind(window);
+window.fetch = (url, opts) => String(url).includes('/settings')
+  ? Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  : __realFetch(url, opts);
+// 整树重渲（垫片不做 diff）：重渲前记住输入框焦点与光标，重渲后恢复，否则打字会丢焦
+function __renderApp() {
+  const stage = document.getElementById('stage');
+  window.__rc = (window.__rc || 0) + 1;
+  __cursor = 0; // 渲染前游标归零，hook 按调用序复用首次渲染的槽位
+  const active = document.activeElement;
+  const inputs = [...document.querySelectorAll('input')];
+  const focusIdx = active && active.tagName === 'INPUT' ? inputs.indexOf(active) : -1;
+  const caret = focusIdx >= 0 ? [active.selectionStart, active.selectionEnd] : null;
+  stage.innerHTML = '';
+  render(panelComponent({ t, useProjection: undefined }), stage);
+  if (focusIdx >= 0) {
+    const el = [...document.querySelectorAll('input')][focusIdx];
+    if (el) { el.focus(); try { el.setSelectionRange(caret[0], caret[1]); } catch {} }
+  }
+}
+__renderApp();
 </script>
 </body></html>
 `;

@@ -775,7 +775,16 @@ const LAYOUT_STYLE_ID = 'dsh-tm-layout-v2';
 if (typeof document !== 'undefined' && !document.getElementById(LAYOUT_STYLE_ID)) {
   const layoutStyle = document.createElement('style');
   layoutStyle.id = LAYOUT_STYLE_ID;
-  layoutStyle.textContent = '@container (max-width: 860px) { .dsh-tm-cols { grid-template-columns: minmax(0, 1fr) !important; } .dsh-tm-hero { grid-template-columns: minmax(0, 1fr) !important; } }';
+  layoutStyle.textContent = '.dsh-tm-act { padding: 2px 6px; margin: -2px -6px; border-radius: 6px; transition: background .12s ease; } '
+    + '.dsh-tm-act:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.16)); } '
+    + '.dsh-tm-act-box { transition: background .12s ease; } '
+    + '.dsh-tm-act-box:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.10)); } '
+    + '.dsh-tm-field { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 6px; cursor: text; '
+    + 'border: 1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.28)); background: var(--dsw-alias-bg-layer-1, rgba(255,255,255,.045)); '
+    + 'transition: border-color .12s ease, background .12s ease; } '
+    + '.dsh-tm-field:hover { border-color: var(--dsw-alias-brand-primary, #2f7dff); background: var(--dsw-alias-bg-layer-2, rgba(47,125,255,.10)); } '
+    + '.dsh-tm-field-off { border-style: dashed; } '
+    + '@container (max-width: 860px) { .dsh-tm-cols { grid-template-columns: minmax(0, 1fr) !important; } }';
   (document.head ?? document.documentElement)?.appendChild(layoutStyle);
 }
 const h = React.createElement;
@@ -1454,12 +1463,36 @@ function TokenMeterPanel(props) {
   }, !officialOk ? t('localShort') : hasTodayLocalSpend ? t('mixedShort') : t('officialLabel'));
 
   /* ---------------- 概览 ---------------- */
+  /* 内联编辑器：就地渲染在触发的状态块里（不再跳到状态条底部）；进框全选，Enter 保存 / Esc 取消 */
+  const editRow = () => h('div', {
+    key: 'edit',
+    style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 12.5, minWidth: 0 },
+  }, [
+    h('input', {
+      key: 'i', value: edit.value, autoFocus: true, inputMode: 'decimal',
+      onChange: (e) => setEdit((cur) => ({ ...cur, value: e.target.value, error: null })),
+      onFocus: (e) => e.target.select(),
+      onKeyDown: (e) => {
+        if (e.key === 'Enter') saveSetting(edit.field, edit.value);
+        if (e.key === 'Escape') setEdit(null);
+      },
+      style: {
+        width: 76, padding: '2px 6px', fontSize: 13, fontVariantNumeric: 'tabular-nums', minWidth: 0,
+        borderRadius: 6, border: `1px solid ${C.brand}`, background: 'transparent', color: C.label,
+      },
+    }),
+    h('span', { key: 's', onClick: () => saveSetting(edit.field, edit.value), style: { cursor: 'pointer', color: C.brand, fontWeight: 650, whiteSpace: 'nowrap' } }, t('save')),
+    h('span', { key: 'c', onClick: () => setEdit(null), style: { cursor: 'pointer', color: C.label3, whiteSpace: 'nowrap' } }, t('cancel')),
+    edit.error ? h('div', {
+      key: 'e', style: { flexBasis: '100%', fontSize: 11, lineHeight: 1.5, color: C.error, overflowWrap: 'anywhere', wordBreak: 'break-word' },
+    }, edit.error) : null,
+  ]);
   const overview = h('div', { key: 'overview' }, [
     h('div', { key: 'wrap', style: { containerType: 'inline-size', display: 'flex', flexDirection: 'column', gap: 12 } }, [
       /* 1) 今天怎么样：先给结论（今天花了多少 / 超没超预算 / 余额够不够 / 钱在哪） */
       h('div', { key: 'hero', style: { ...S.panel, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 } }, [
-        h('div', { key: 'g', className: 'dsh-tm-hero', style: { display: 'grid', gridTemplateColumns: 'minmax(0,1.45fr) minmax(0,1fr)', gap: 18, alignItems: 'start' } }, [
-          h('div', { key: 'main', style: { minWidth: 0, alignSelf: 'center' } }, [
+        h('div', { key: 'g', style: { display: 'flex', flexDirection: 'column', gap: 12 } }, [
+          h('div', { key: 'main', style: { minWidth: 0 } }, [
             h('div', { key: 'l', style: { fontSize: 12.5, color: C.label3, display: 'flex', alignItems: 'baseline', gap: 6 } }, [
               h('span', { key: 'a' }, t('today')),
               h('span', { key: 'd', style: { color: C.label2, fontVariantNumeric: 'tabular-nums' } }, today),
@@ -1503,25 +1536,27 @@ function TokenMeterPanel(props) {
               }, [h('span', { key: 'i', style: { fontSize: 13, lineHeight: 1 } }, '⟳'), t('refresh')]),
             ]),
           ]),
-          /* 右侧：三个状态块（今日预算 / 本月预算 / 余额），先看「还够不够」 */
-          h('div', { key: 'status', style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 } }, [
+          /* 状态条：今日预算 / 本月预算 / 余额 跟结论放在一起（点金额即可修改），不再左右分栏 */
+          h('div', { key: 'status', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8, minWidth: 0 } }, [
             h('div', { key: 'b1', style: { ...S.stat, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 5 } }, [
               h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11.5, color: C.label3 } }, [
                 budget > 0 ? h('span', {
-                  key: 'n', title: t('editBudgetHint'),
+                  key: 'n', title: t('editBudgetHint'), className: 'dsh-tm-field',
                   onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: String(budget) }),
-                  style: { cursor: 'pointer', textDecoration: 'underline dotted' },
+                  style: { cursor: 'text' },
                 }, `${t('budgetUsed')} ${money(budget)} ✎`)
                   : h('span', {
-                    key: 'n', title: t('budgetOffHint'),
+                    key: 'n', title: t('budgetOffHint'), className: 'dsh-tm-field dsh-tm-field-off',
                     onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: String(budget) }),
-                    style: { cursor: 'pointer', textDecoration: 'underline dotted', color: C.label2 },
+                    style: { cursor: 'text', color: C.label2 },
                   }, `${t('budgetOff')} ✎`),
                 h('span', {
                   key: 'v',
                   style: { marginLeft: 'auto', color: over ? C.error : C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums', textAlign: 'right' },
                 }, budget > 0 ? `${t('used')} ${usedPct.toFixed(1)}%` : `今日 ${money(D.cny)}`),
               ]),
+              /* 编辑日预算时，编辑器就地替换进度条与预估两行 */
+              ...(edit && edit.field === 'dailyBudget' ? [editRow()] : [
               h('div', { key: 'p', style: { display: 'flex', alignItems: 'center', gap: 8 } }, [
                 budget > 0 ? h('div', { key: 'bar', style: { flex: 1, minWidth: 0 } }, h(Progress, {
                   value: usedPct, color: over ? C.error : warn ? C.warn : C.brand,
@@ -1529,6 +1564,7 @@ function TokenMeterPanel(props) {
                 })) : h('div', {
                   key: 'bar',
                   title: t('budgetOffHint'),
+                  className: 'dsh-tm-act',
                   onClick: () => setEdit({ field: 'dailyBudget', label: t('budgetUsed'), value: '50' }),
                   style: { flex: 1, fontSize: 11.5, color: C.label3, cursor: 'pointer', lineHeight: 1.5 },
                 }, t('budgetOffHint')),
@@ -1544,21 +1580,25 @@ function TokenMeterPanel(props) {
                 over ? h('span', { key: 'w', style: { color: C.error, whiteSpace: 'nowrap' } }, `⚠ ${t('overBudget')}`)
                   : warn ? h('span', { key: 'w', style: { color: C.warn, whiteSpace: 'nowrap' } }, `⚠ ${t('warnLine')} ${alertPct}%`) : null,
               ]),
+              ]),
             ]),
             h('div', { key: 'b2', style: { ...S.stat, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 5 } }, [
               h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11.5, color: C.label3 } }, [
                 h('span', {
-                  key: 'n', title: t('budgetOffHint'),
+                  key: 'n', title: t('budgetOffHint'), className: 'dsh-tm-field',
                   onClick: () => setEdit({ field: 'monthlyBudget', label: t('monthBudget'), value: String(monthBudget) }),
-                  style: { cursor: 'pointer', textDecoration: 'underline dotted' },
+                  style: { cursor: 'text' },
                 }, `${t('monthBudget')} ✎`),
                 h('span', { key: 'v', style: { marginLeft: 'auto', color: C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' } },
                   monthBudget > 0 ? `¥${fmtMoney(monthSpent)} / ¥${fmtMoney(monthBudget)}` : `${t('monthSpent')} ¥${fmtMoney(monthSpent)} · ${t('monthOff')}`),
               ]),
-              monthBudget > 0 ? h(Progress, { key: 'p', value: monthPct, color: monthPct >= 100 ? C.error : monthPct >= 80 ? C.warn : C.brand }) : null,
+              /* 编辑月预算时，编辑器就地替换进度条 */
+              edit && edit.field === 'monthlyBudget' ? editRow()
+                : monthBudget > 0 ? h(Progress, { key: 'p', value: monthPct, color: monthPct >= 100 ? C.error : monthPct >= 80 ? C.warn : C.brand }) : null,
             ]),
             h('div', {
-              key: 'bal', style: { ...S.stat, padding: '9px 11px', cursor: 'pointer' },
+              key: 'bal', className: 'dsh-tm-act-box', title: t('refresh'),
+              style: { ...S.stat, padding: '9px 11px', cursor: 'pointer' },
               onClick: () => { balance.reload(); refresh(); },
             }, [
               h('div', { key: 'l', style: { display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11.5, color: C.label3 } }, [
@@ -1575,33 +1615,16 @@ function TokenMeterPanel(props) {
                 balSource ? h('span', { key: 's', style: { fontSize: 10.5, color: C.label3, padding: '1px 6px', borderRadius: 999, border: `1px solid ${C.border}` } }, balSource) : null,
               ]),
             ]),
-            balLow ? h('div', {
+            balLow ? (edit && edit.field === 'lowBalanceAlert' ? h('div', {
               key: 'lowbal',
+              style: { gridColumn: '1 / -1', fontSize: 11.5, color: C.error, opacity: 0.9 },
+            }, editRow()) : h('div', {
+              key: 'lowbal',
+              className: 'dsh-tm-act',
               onClick: () => setEdit({ field: 'lowBalanceAlert', label: t('lowBalance'), value: String(lowAlert) }),
               title: t('lowBalanceHint'),
-              style: { fontSize: 11.5, cursor: 'pointer', color: C.error, opacity: 0.9 },
-            }, `⚠ ${t('lowBalance')} ¥${fmtMoney(lowAlert)} · ${t('editLowHint')} ✎`) : null,
-            edit ? h('div', {
-              key: 'edit',
-              style: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', borderTop: `1px solid ${C.border1}`, fontSize: 12.5 },
-            }, [
-              h('span', { key: 'l', style: { color: C.label3 } }, `${edit.label} =`),
-              h('input', {
-                key: 'i', value: edit.value, autoFocus: true, inputMode: 'decimal',
-                onChange: (e) => setEdit((cur) => ({ ...cur, value: e.target.value, error: null })),
-                onKeyDown: (e) => {
-                  if (e.key === 'Enter') saveSetting(edit.field, edit.value);
-                  if (e.key === 'Escape') setEdit(null);
-                },
-                style: {
-                  width: 76, padding: '2px 6px', fontSize: 13, fontVariantNumeric: 'tabular-nums',
-                  borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.label,
-                },
-              }),
-              h('span', { key: 's', onClick: () => saveSetting(edit.field, edit.value), style: { cursor: 'pointer', color: C.brand, fontWeight: 650 } }, t('save')),
-              h('span', { key: 'c', onClick: () => setEdit(null), style: { cursor: 'pointer', color: C.label3 } }, t('cancel')),
-              edit.error ? h('span', { key: 'e', style: { color: C.error, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 } }, edit.error) : null,
-            ]) : null,
+              style: { gridColumn: '1 / -1', fontSize: 11.5, cursor: 'pointer', color: C.error, opacity: 0.9 },
+            }, `⚠ ${t('lowBalance')} ¥${fmtMoney(lowAlert)} · ${t('editLowHint')} ✎`)) : null,
           ]),
         ]),
       ]),
@@ -1624,6 +1647,162 @@ function TokenMeterPanel(props) {
         ]),
         h('div', { key: 'note', style: { fontSize: 11, color: C.label3, lineHeight: 1.6, marginTop: 10 } }, t('wideSourceNote')),
       ]),
+
+      /* 4) 构成：渠道拆分 + token 构成（等高：两卡底边对齐，短卡的注释钉在底部） */
+      h('div', {
+        key: 'middle',
+        className: 'dsh-tm-cols',
+        style: { display: 'grid', gridTemplateColumns: 'minmax(0,1.15fr) minmax(0,1fr)', gap: 12 },
+      }, [
+      h('div', { key: 'channels', style: { ...S.card, marginTop: 0, minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column' } }, [
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
+      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13 } }, [
+        tableHead([t('channelCol'), t('channelToday'), t('channel30d')], [], '5px 6px'),
+        h('tbody', { key: 'tb' }, [
+          ...channelStats.map((row) => h('tr', { key: row.key }, [
+            h('td', { key: 'n', style: cellTight({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+              row.official
+                ? h('span', { key: 'tag', style: { fontSize: 10.5, padding: '1px 4px', borderRadius: 5, marginRight: 5, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialLabel'))
+                : null,
+              // 官方两行分别是「账号额度」和「API Key」（走 API Key 不占账号额度），不能并成一行
+              row.official
+                ? (row.labelKey ? t(row.labelKey) : '')
+                : (row.provider || t('thirdChannel')),
+              !row.official && row.provider && channelRateKeys.includes(row.provider)
+                ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
+            ]),
+            h('td', { key: 't', style: cellTight({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
+            h('td', { key: 'm', style: cellTight({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
+          ])),
+          // 工具调用（Search）单独计费：官方按成功请求收费，本地按成功调用次数估算；
+          // 2026-11-01 之前免费，所以金额可能是 0。这笔钱不并入上面的 token 金额。
+          h('tr', { key: 'tool-search' }, [
+            h('td', { key: 'n', style: cellTight({ color: C.label2, whiteSpace: 'nowrap' }) }, [
+              h('span', { key: 'tag', style: { fontSize: 10.5, padding: '1px 4px', borderRadius: 5, marginRight: 5, border: `1px solid ${C.border}`, color: C.warn, whiteSpace: 'nowrap' } }, t('toolBillingTag')),
+              t('toolSearchRow'),
+            ]),
+            h('td', { key: 't', style: cellTight({ ...rightAlign, fontWeight: 650, color: C.label, whiteSpace: 'nowrap' }) }, [
+              money(searchToday.cny),
+              h('span', { key: 'c', style: { fontSize: 10.5, fontWeight: 400, color: C.label3, marginLeft: 4 } }, `${searchToday.calls} ${t('calls')}`),
+            ]),
+            h('td', { key: 'm', style: cellTight({ ...rightAlign, color: C.label2, whiteSpace: 'nowrap' }) }, [
+              money(search30.cny),
+              h('span', { key: 'c', style: { fontSize: 10.5, color: C.label3, marginLeft: 4 } }, `${search30.calls} ${t('calls')}`),
+            ]),
+          ]),
+        ]),
+      ])),
+      h('div', { key: 'note', style: { fontSize: 11.5, color: C.label3, marginTop: 'auto', paddingTop: 6, lineHeight: 1.6 } }, t('channelNote')),
+      ]),
+h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start', minWidth: 0, flex: 1 } }, [
+        h(Stat, { key: '1', t, surface: S.stat, label: t('hitInput'), color: C.hit, value: fmt(D.hit) }),
+        h(Stat, { key: '2', t, surface: S.stat, label: t('hitRate'), value: D.hitRate === null || D.hitRate === undefined ? '—' : `${D.hitRate}`, unit: '%' }),
+        h(Stat, { key: '3', t, surface: S.stat, label: t('missInput'), color: C.miss, value: fmt(D.miss) }),
+        h(Stat, { key: '4', t, surface: S.stat, label: t('output'), color: C.out, value: fmt(D.out) }),
+        h('div', {
+          key: 'avg',
+          style: { gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2 },
+        }, [
+          h(MiniStat, { key: 'tt', label: t('totalTokens'), value: fmt(D.hit + D.miss + D.out) }),
+          h(MiniStat, { key: 'c', label: t('callsShort'), value: `${D.calls}` }),
+          h(MiniStat, { key: 'pc', label: t('perCall'), hint: t('perCallHint'), value: D.calls > 0 ? `¥${(D.cny / D.calls).toFixed(4)}` : '—' }),
+        ]),
+        h('div', { key: 'compose', style: { gridColumn: '1 / -1', borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2, fontSize: 12 } }, (() => {
+          const total = D.hit + D.miss + D.out;
+          const seg = (n, color) => (total > 0 ? h('i', { key: color, style: { flexGrow: Math.max(n, total / 2000), background: color } }) : null);
+          return [
+            h('div', { key: 'h', style: { display: 'flex', alignItems: 'baseline', gap: 8 } }, [
+              h('span', { key: 'l', style: { color: C.label3 } }, t('composeTitle')),
+              h('span', { key: 'v', style: { marginLeft: 'auto', color: C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' } }, fmt(total)),
+            ]),
+            h('div', { key: 'bar', style: { display: 'flex', height: 9, borderRadius: 99, overflow: 'hidden', marginTop: 7, background: C.border1 } }, [seg(D.hit, C.hit), seg(D.miss, C.miss), seg(D.out, C.out)]),
+            h('div', { key: 'lg', style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: C.label3, marginTop: 5 } }, [
+              h(LegendDot, { key: 'h', color: C.hit, text: `${t('hitInput')} ${fmt(D.hit)}${total > 0 ? ` · ${((100 * D.hit) / total).toFixed(1)}%` : ''}` }),
+              h(LegendDot, { key: 'm', color: C.miss, text: `${t('missInput')} ${fmt(D.miss)}${total > 0 ? ` · ${((100 * D.miss) / total).toFixed(1)}%` : ''}` }),
+              h(LegendDot, { key: 'o', color: C.out, text: `${t('output')} ${fmt(D.out)}${total > 0 ? ` · ${((100 * D.out) / total).toFixed(1)}%` : ''}` }),
+            ]),
+          ];
+        })()),
+      ]),
+      ]),
+
+      /* 5) 计费参考（等高：数据源卡的最后一块钉底） */
+      h('div', {
+        key: 'bottom',
+        className: 'dsh-tm-cols',
+        style: { display: 'grid', gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)', gap: 12 },
+      }, [
+h('div', { key: 'rates', style: { ...S.panel, fontSize: 12, color: C.label3, lineHeight: 1.7, minWidth: 0, flex: 1 } }, [
+        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('tierTitle')),
+        h('div', { key: 'tier', style: { marginTop: 4 } }, [
+          h('span', { key: 'l', style: { color: C.label2, fontWeight: 600 } }, `${t('currentTier')}：`),
+          h('span', { key: 'v', style: { color: data.peakNow ? C.warn : C.label2 } }, data.peakNow ? t('peak') : t('offpeak')),
+        ]),
+        h('div', { key: 'w', style: { fontSize: 11.5, lineHeight: 1.6 } }, t('peakWindow')),
+        (() => {
+          const rows = [
+            { k: 'hit', label: t('hitInput'), now: unit.hit, tokens: D.hit },
+            { k: 'miss', label: t('missInput'), now: unit.miss, tokens: D.miss },
+            { k: 'out', label: t('output'), now: unit.out, tokens: D.out },
+          ];
+          const line = { borderTop: `1px solid ${C.border1}` };
+          const td = (key, value, style) => h('td', { key, style }, value);
+          return h('table', { key: 'merge', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 9 } }, [
+            h('thead', { key: 'th' }, h('tr', null, [
+              h('th', { key: 'i', style: { textAlign: 'left', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colItem')),
+              h('th', { key: 'p', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colPrice')),
+              h('th', { key: 'u', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colUsage')),
+              h('th', { key: 's', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colSubtotal')),
+            ])),
+            h('tbody', { key: 'tb' }, [
+              ...rows.map((r) => h('tr', { key: r.k }, [
+                td('i', r.label, { ...line, padding: '3px 4px', color: C.label2, whiteSpace: 'nowrap' }),
+                td('p', h('b', { style: { color: C.ok } }, `¥${r.now}`), { ...line, ...rightAlign, padding: '3px 4px' }),
+                td('u', fmtM(r.tokens), { ...line, ...rightAlign, padding: '3px 4px' }),
+                td('s', money((r.tokens / 1e6) * (r.now ?? 0)), { ...line, ...rightAlign, padding: '3px 4px', fontWeight: 650 }),
+              ])),
+              h('tr', { key: 'all' }, [
+                td('l', t('todayTotal'), { ...line, padding: '3px 4px', textAlign: 'right', color: C.label2, fontWeight: 700, colSpan: 3, whiteSpace: 'nowrap' }),
+                td('v', money(D.cny), { ...line, ...rightAlign, padding: '3px 4px', fontWeight: 750, color: C.label }),
+              ]),
+            ]),
+          ]);
+        })(),
+        D.tier ? h('div', { key: 'tiernote', style: { fontSize: 11.5, color: C.label3, marginTop: 6 } },
+          `${t('byLocalTier')}：${t('tierOffShort')} ${money(D.tier.offPeak?.cny ?? 0)} · ${t('tierPeakShort')} ${money(D.tier.peak?.cny ?? 0)}`) : null,
+        h('div', { key: 'note', style: { fontSize: 11.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
+        hasThirdParty ? h('div', { key: 'third', style: { fontSize: 11.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
+      ]),
+      /* 5) 参考：数据源与口径 / 快捷去明细、导出 */
+      h('div', { key: 'sources', style: { ...S.panel, fontSize: 12, color: C.label3, lineHeight: 1.75, display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 } }, [
+        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('dataSources')),
+        h('div', { key: 'rate' }, `${t('rateLine')}：${data.peakNow ? t('peak') : t('offpeak')}`),
+        officialOk
+          ? h('div', { key: 'ok' }, `${t('officialLabel')} ✓ ${official.days ? Object.keys(official.days).length : 0} 天`)
+          : h('div', { key: 'off', style: { color: C.warn } }, `${t('officialLabel')}：${official?.reason === 'loading' ? t('officialLoading') : official?.reason === 'disabled' ? t('officialOff') : official?.reason === 'no-credential' ? t('notConnectedChrome') : official?.reason === 'no-browser' ? t('noBrowser') : (official?.error ?? t('balanceFailed'))}`),
+        h('div', { key: 'stored' }, t('settingsStored')),
+        h('div', { key: 'link' }, h('a', {
+          href: data.billingUrl || 'https://platform.deepseek.com/usage', target: '_blank', rel: 'noreferrer',
+          style: { color: C.brand, textDecoration: 'none' },
+        }, `${t('billingLink')} ↗`)),
+        h('div', { key: 'more', style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 'auto', paddingTop: 2 } }, [
+          h(Chip, { key: 'd', onClick: () => setView('detail') }, `${t('tabDetail')} →`),
+          h(Chip, { key: 'e', onClick: () => setView('export') }, `${t('tabExport')} →`),
+        ]),
+      ]),
+      ]),
+
+    live ? h('div', { key: 'live', style: { ...S.card, marginTop: 0 } }, [
+      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, t('liveHint')) }, t('live')),
+      h('div', {
+        key: 'g',
+        style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10, marginTop: 10 },
+      }, [
+        h(Stat, { key: 'a', t, label: t('missInput'), color: C.miss, value: fmt(live.uncachedInputTokens) }),
+        h(Stat, { key: 'b', t, label: t('hitInput'), color: C.hit, value: fmt(live.cacheReadTokens) }),
+        h(Stat, { key: 'c', t, label: t('output'), color: C.out, value: fmt(live.outputTokens) }),
+      ]),
+    ]) : null,
 
       h('div', { key: 'trend', style: { ...S.card, marginTop: 0 } }, [
       h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' } }, [
@@ -1799,161 +1978,6 @@ function TokenMeterPanel(props) {
           }, String(hour).padStart(2, '0')))),
       ]),
       ]),
-      /* 4) 构成：渠道拆分 + token 构成 */
-      h('div', {
-        key: 'middle',
-        className: 'dsh-tm-cols',
-        style: { display: 'grid', gridTemplateColumns: 'minmax(0,1.15fr) minmax(0,1fr)', gap: 12, alignItems: 'start' },
-      }, [
-      h('div', { key: 'channels', style: { ...S.card, marginTop: 0, minWidth: 0, flex: 1 } }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, `${channelStats.length} ${t('channelCol')}`) }, t('channelSplit')),
-      h('div', { key: 'tb', style: { marginTop: 8, overflowX: 'auto' } }, h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13 } }, [
-        tableHead([t('channelCol'), t('channelToday'), t('channel30d')], [], '5px 6px'),
-        h('tbody', { key: 'tb' }, [
-          ...channelStats.map((row) => h('tr', { key: row.key }, [
-            h('td', { key: 'n', style: cellTight({ color: C.label2, whiteSpace: 'nowrap' }) }, [
-              row.official
-                ? h('span', { key: 'tag', style: { fontSize: 10.5, padding: '1px 4px', borderRadius: 5, marginRight: 5, border: `1px solid ${C.border}`, color: C.brand, whiteSpace: 'nowrap' } }, t('officialLabel'))
-                : null,
-              // 官方两行分别是「账号额度」和「API Key」（走 API Key 不占账号额度），不能并成一行
-              row.official
-                ? (row.labelKey ? t(row.labelKey) : '')
-                : (row.provider || t('thirdChannel')),
-              !row.official && row.provider && channelRateKeys.includes(row.provider)
-                ? h('span', { key: 'r', style: { fontSize: 11, color: C.label3, marginLeft: 6 } }, t('customRateTag')) : null,
-            ]),
-            h('td', { key: 't', style: cellTight({ ...rightAlign, fontWeight: 650, color: C.label }), title: `${fmt(row.today.tokens)} tokens` }, money(row.today.cny)),
-            h('td', { key: 'm', style: cellTight({ ...rightAlign, color: C.label2 }), title: `${fmt(row.d30.tokens)} tokens` }, money(row.d30.cny)),
-          ])),
-          // 工具调用（Search）单独计费：官方按成功请求收费，本地按成功调用次数估算；
-          // 2026-11-01 之前免费，所以金额可能是 0。这笔钱不并入上面的 token 金额。
-          h('tr', { key: 'tool-search' }, [
-            h('td', { key: 'n', style: cellTight({ color: C.label2, whiteSpace: 'nowrap' }) }, [
-              h('span', { key: 'tag', style: { fontSize: 10.5, padding: '1px 4px', borderRadius: 5, marginRight: 5, border: `1px solid ${C.border}`, color: C.warn, whiteSpace: 'nowrap' } }, t('toolBillingTag')),
-              t('toolSearchRow'),
-            ]),
-            h('td', { key: 't', style: cellTight({ ...rightAlign, fontWeight: 650, color: C.label, whiteSpace: 'nowrap' }) }, [
-              money(searchToday.cny),
-              h('span', { key: 'c', style: { fontSize: 10.5, fontWeight: 400, color: C.label3, marginLeft: 4 } }, `${searchToday.calls} ${t('calls')}`),
-            ]),
-            h('td', { key: 'm', style: cellTight({ ...rightAlign, color: C.label2, whiteSpace: 'nowrap' }) }, [
-              money(search30.cny),
-              h('span', { key: 'c', style: { fontSize: 10.5, color: C.label3, marginLeft: 4 } }, `${search30.calls} ${t('calls')}`),
-            ]),
-          ]),
-        ]),
-      ])),
-      h('div', { key: 'note', style: { fontSize: 11.5, color: C.label3, marginTop: 6, lineHeight: 1.6 } }, t('channelNote')),
-      ]),
-h('div', { key: 'stats', style: { ...S.panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start', minWidth: 0, flex: 1 } }, [
-        h(Stat, { key: '1', t, surface: S.stat, label: t('hitInput'), color: C.hit, value: fmt(D.hit) }),
-        h(Stat, { key: '2', t, surface: S.stat, label: t('hitRate'), value: D.hitRate === null || D.hitRate === undefined ? '—' : `${D.hitRate}`, unit: '%' }),
-        h(Stat, { key: '3', t, surface: S.stat, label: t('missInput'), color: C.miss, value: fmt(D.miss) }),
-        h(Stat, { key: '4', t, surface: S.stat, label: t('output'), color: C.out, value: fmt(D.out) }),
-        h('div', {
-          key: 'avg',
-          style: { gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2 },
-        }, [
-          h(MiniStat, { key: 'tt', label: t('totalTokens'), value: fmt(D.hit + D.miss + D.out) }),
-          h(MiniStat, { key: 'c', label: t('callsShort'), value: `${D.calls}` }),
-          h(MiniStat, { key: 'pc', label: t('perCall'), hint: t('perCallHint'), value: D.calls > 0 ? `¥${(D.cny / D.calls).toFixed(4)}` : '—' }),
-        ]),
-        h('div', { key: 'compose', style: { gridColumn: '1 / -1', borderTop: `1px solid ${C.border1}`, paddingTop: 8, marginTop: 2, fontSize: 12 } }, (() => {
-          const total = D.hit + D.miss + D.out;
-          const seg = (n, color) => (total > 0 ? h('i', { key: color, style: { flexGrow: Math.max(n, total / 2000), background: color } }) : null);
-          return [
-            h('div', { key: 'h', style: { display: 'flex', alignItems: 'baseline', gap: 8 } }, [
-              h('span', { key: 'l', style: { color: C.label3 } }, t('composeTitle')),
-              h('span', { key: 'v', style: { marginLeft: 'auto', color: C.label2, fontWeight: 600, fontVariantNumeric: 'tabular-nums' } }, fmt(total)),
-            ]),
-            h('div', { key: 'bar', style: { display: 'flex', height: 9, borderRadius: 99, overflow: 'hidden', marginTop: 7, background: C.border1 } }, [seg(D.hit, C.hit), seg(D.miss, C.miss), seg(D.out, C.out)]),
-            h('div', { key: 'lg', style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: C.label3, marginTop: 5 } }, [
-              h(LegendDot, { key: 'h', color: C.hit, text: `${t('hitInput')} ${fmt(D.hit)}${total > 0 ? ` · ${((100 * D.hit) / total).toFixed(1)}%` : ''}` }),
-              h(LegendDot, { key: 'm', color: C.miss, text: `${t('missInput')} ${fmt(D.miss)}${total > 0 ? ` · ${((100 * D.miss) / total).toFixed(1)}%` : ''}` }),
-              h(LegendDot, { key: 'o', color: C.out, text: `${t('output')} ${fmt(D.out)}${total > 0 ? ` · ${((100 * D.out) / total).toFixed(1)}%` : ''}` }),
-            ]),
-          ];
-        })()),
-      ]),
-      ]),
-
-      /* 5) 计费参考 */
-      h('div', {
-        key: 'bottom',
-        className: 'dsh-tm-cols',
-        style: { display: 'grid', gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)', gap: 12, alignItems: 'start' },
-      }, [
-h('div', { key: 'rates', style: { ...S.panel, fontSize: 12, color: C.label3, lineHeight: 1.7, minWidth: 0, flex: 1 } }, [
-        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('tierTitle')),
-        h('div', { key: 'tier', style: { marginTop: 4 } }, [
-          h('span', { key: 'l', style: { color: C.label2, fontWeight: 600 } }, `${t('currentTier')}：`),
-          h('span', { key: 'v', style: { color: data.peakNow ? C.warn : C.label2 } }, data.peakNow ? t('peak') : t('offpeak')),
-        ]),
-        h('div', { key: 'w', style: { fontSize: 11.5, lineHeight: 1.6 } }, t('peakWindow')),
-        (() => {
-          const rows = [
-            { k: 'hit', label: t('hitInput'), now: unit.hit, tokens: D.hit },
-            { k: 'miss', label: t('missInput'), now: unit.miss, tokens: D.miss },
-            { k: 'out', label: t('output'), now: unit.out, tokens: D.out },
-          ];
-          const line = { borderTop: `1px solid ${C.border1}` };
-          const td = (key, value, style) => h('td', { key, style }, value);
-          return h('table', { key: 'merge', style: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 9 } }, [
-            h('thead', { key: 'th' }, h('tr', null, [
-              h('th', { key: 'i', style: { textAlign: 'left', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colItem')),
-              h('th', { key: 'p', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colPrice')),
-              h('th', { key: 'u', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colUsage')),
-              h('th', { key: 's', style: { textAlign: 'right', fontSize: 11.5, fontWeight: 600, color: C.label3, padding: '2px 4px' } }, t('colSubtotal')),
-            ])),
-            h('tbody', { key: 'tb' }, [
-              ...rows.map((r) => h('tr', { key: r.k }, [
-                td('i', r.label, { ...line, padding: '3px 4px', color: C.label2, whiteSpace: 'nowrap' }),
-                td('p', h('b', { style: { color: C.ok } }, `¥${r.now}`), { ...line, ...rightAlign, padding: '3px 4px' }),
-                td('u', fmtM(r.tokens), { ...line, ...rightAlign, padding: '3px 4px' }),
-                td('s', money((r.tokens / 1e6) * (r.now ?? 0)), { ...line, ...rightAlign, padding: '3px 4px', fontWeight: 650 }),
-              ])),
-              h('tr', { key: 'all' }, [
-                td('l', t('todayTotal'), { ...line, padding: '3px 4px', textAlign: 'right', color: C.label2, fontWeight: 700, colSpan: 3, whiteSpace: 'nowrap' }),
-                td('v', money(D.cny), { ...line, ...rightAlign, padding: '3px 4px', fontWeight: 750, color: C.label }),
-              ]),
-            ]),
-          ]);
-        })(),
-        D.tier ? h('div', { key: 'tiernote', style: { fontSize: 11.5, color: C.label3, marginTop: 6 } },
-          `${t('byLocalTier')}：${t('tierOffShort')} ${money(D.tier.offPeak?.cny ?? 0)} · ${t('tierPeakShort')} ${money(D.tier.peak?.cny ?? 0)}`) : null,
-        h('div', { key: 'note', style: { fontSize: 11.5, marginTop: 6, lineHeight: 1.6 } }, t('rateFootnote')),
-        hasThirdParty ? h('div', { key: 'third', style: { fontSize: 11.5, marginTop: 4, lineHeight: 1.6, color: C.warn } }, t('thirdPartyRateNote')) : null,
-      ]),
-      /* 5) 参考：数据源与口径 / 快捷去明细、导出 */
-      h('div', { key: 'sources', style: { ...S.panel, fontSize: 12, color: C.label3, lineHeight: 1.75, display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 } }, [
-        h('div', { key: 'h', style: { fontSize: 13, fontWeight: 650, color: C.label2 } }, t('dataSources')),
-        h('div', { key: 'rate' }, `${t('rateLine')}：${data.peakNow ? t('peak') : t('offpeak')}`),
-        officialOk
-          ? h('div', { key: 'ok' }, `${t('officialLabel')} ✓ ${official.days ? Object.keys(official.days).length : 0} 天`)
-          : h('div', { key: 'off', style: { color: C.warn } }, `${t('officialLabel')}：${official?.reason === 'loading' ? t('officialLoading') : official?.reason === 'disabled' ? t('officialOff') : official?.reason === 'no-credential' ? t('notConnectedChrome') : official?.reason === 'no-browser' ? t('noBrowser') : (official?.error ?? t('balanceFailed'))}`),
-        h('div', { key: 'stored' }, t('settingsStored')),
-        h('div', { key: 'link' }, h('a', {
-          href: data.billingUrl || 'https://platform.deepseek.com/usage', target: '_blank', rel: 'noreferrer',
-          style: { color: C.brand, textDecoration: 'none' },
-        }, `${t('billingLink')} ↗`)),
-        h('div', { key: 'more', style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 } }, [
-          h(Chip, { key: 'd', onClick: () => setView('detail') }, `${t('tabDetail')} →`),
-          h(Chip, { key: 'e', onClick: () => setView('export') }, `${t('tabExport')} →`),
-        ]),
-      ]),
-      ]),
-
-    live ? h('div', { key: 'live', style: { ...S.card, marginTop: 0 } }, [
-      h(SectionTitle, { key: 'h', right: h('span', { key: 'n', style: { fontSize: 11.5 } }, t('liveHint')) }, t('live')),
-      h('div', {
-        key: 'g',
-        style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10, marginTop: 10 },
-      }, [
-        h(Stat, { key: 'a', t, label: t('missInput'), color: C.miss, value: fmt(live.uncachedInputTokens) }),
-        h(Stat, { key: 'b', t, label: t('hitInput'), color: C.hit, value: fmt(live.cacheReadTokens) }),
-        h(Stat, { key: 'c', t, label: t('output'), color: C.out, value: fmt(live.outputTokens) }),
-      ]),
-    ]) : null,
     ]),
   ]);
 
@@ -2256,7 +2280,7 @@ h('div', { key: 'rates', style: { ...S.panel, fontSize: 12, color: C.label3, lin
         filter: 'blur(40px) saturate(140%)', transform: 'translateZ(0)',
       },
     }) : null,
-    h('div', { key: 'body', style: { position: 'relative', zIndex: 1 } }, [
+    h('div', { key: 'body', style: { position: 'relative', zIndex: 1, maxWidth: 1600, margin: '0 auto' } }, [
       h('div', { key: 'head', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 } }, [
         h('div', { key: 'ti', style: { minWidth: 0 } }, [
           h('div', { key: 'l1', style: { fontWeight: 700, fontSize: 16 } }, [
