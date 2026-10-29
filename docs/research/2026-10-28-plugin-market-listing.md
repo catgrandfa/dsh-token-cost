@@ -193,4 +193,8 @@ tarball: https://github.com/catgrandfa/dsh-token-cost/releases/download/v0.3.7/d
   `.github/workflows/release-tarball.yml`；`5af7c77` 提交本笔记；已 push 到 `main`。
 - 2026-10-29 01:02 UTC：手动触发 `release-tarball` 工作流，30 秒内成功，`v0.3.7` Release 出现资产
   `dsh-token-cost.tgz`（735,708 B）；同时 `test` 工作流在 push 后双平台跑过。
-- 待办：只剩仓库满 1 天（2026-10-29 09:03 UTC / 北京 17:03）后的 awesome 单文件 PR。
+- 2026-10-29 17:06 CST：仓库年龄 24.04h，过「满 1 天」门槛。
+- 2026-10-29 17:50 CST：**PR 已提交** — https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/10340
+  （fork 到 `catgrandfa`，分支 `add-catgrandfa-dsh-token-cost`，1 commit / 1 file / +7 行，
+  只有 `data/plugins/catgrandfa__dsh-token-cost.yml`，没有动 README）。
+- 待跟进：维护者可能打 `held: author` 标签要求改描述；按要求在同一分支推修复 + 留一条评论即可。
