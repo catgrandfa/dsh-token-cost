@@ -50,7 +50,7 @@ function demoData() {
   const blank = () => ({
     miss: 0, hit: 0, out: 0, cacheWrite: 0, reasoning: 0, calls: 0, cny: 0,
     peakCalls: 0, unpricedCalls: 0, firstTime: null, lastTime: null,
-    hitRate: null, byHour: new Array(24).fill(0),
+    hitRate: null, byHour: new Array(24).fill(0), byHourCny: new Array(24).fill(0),
     tier: { peak: { hit: 0, miss: 0, out: 0, cny: 0, calls: 0 }, offPeak: { hit: 0, miss: 0, out: 0, cny: 0, calls: 0 } },
   });
   const days = {};
@@ -142,7 +142,7 @@ function demoData() {
       miss, hit, out, cacheWrite: 0, reasoning: 0, calls: Math.max(3, 60 - i * 6),
       cny: Number(((hit / 1e6) * 0.02 + (miss / 1e6) * 1 + (out / 1e6) * 4).toFixed(6)),
       peakCalls: 10, unpricedCalls: 0, firstTime: sessMs - 5 * 3600e3, lastTime: sessMs,
-      hitRate: Number(((100 * hit) / (hit + miss)).toFixed(1)), byHour: new Array(24).fill(0),
+      hitRate: Number(((100 * hit) / (hit + miss)).toFixed(1)), byHour: new Array(24).fill(0), byHourCny: new Array(24).fill(0),
       tier: undefined,
       id: `session-${i + 1}`, workspace: workspaces[i % workspaces.length], title,
       createdAt: sessMs - 6 * 3600e3, delegationDepth: i === 3 ? 1 : 0, isSubagent: i === 3,
@@ -192,6 +192,19 @@ function demoData() {
     };
   }
   thirdParty.cny = Number(thirdParty.cny.toFixed(6));
+  // 分时花费：演示数据按「分时 token × 峰谷权重（高峰 2 倍）」分摊当日金额，
+  // 与宿主 byHourCny 口径一致（分时柱花费之和 = 当日消费），两种视角的图形也不同。
+  const hourWeight = (hour) => {
+    const dow = cst(now).getUTCDay();
+    const weekend = dow === 0 || dow === 6;
+    const peak = !weekend && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18));
+    return peak ? 2 : 1;
+  };
+  for (const entry of Object.values(days)) {
+    const weights = entry.byHour.map((v, hour) => v * hourWeight(hour));
+    const sum = weights.reduce((acc, v) => acc + v, 0);
+    entry.byHourCny = weights.map((v) => (sum > 0 ? Number(((v / sum) * entry.cny).toFixed(6)) : 0));
+  }
   const deepseekCalls = Object.values(days).reduce((sum, day) => sum + day.calls, 0) - thirdParty.calls;
   const deepseekTokens = Object.values(days).reduce((sum, day) => sum + day.hit + day.miss + day.out, 0) - thirdParty.tokens;
   const deepseekCny = Number((Object.values(days).reduce((sum, day) => sum + day.cny, 0) - thirdParty.cny).toFixed(6));
@@ -235,6 +248,7 @@ function demoData() {
         out: officialDays[todayKey]?.out ?? 0,
         requests: officialDays[todayKey]?.requests ?? 0,
         byHour: days[todayKey].byHour,
+        byHourCny: days[todayKey].byHourCny,
         days: officialDays, fetchedAt: now,
       },
       meterSource: 'mixed',
@@ -245,7 +259,7 @@ function demoData() {
         skin: 'glass', rates,
       },
       plugin: {
-        name: 'dsh-token-cost', version: '0.3.7', license: 'MIT',
+        name: 'dsh-token-cost', version: '0.3.8', license: 'MIT',
         repo: 'https://github.com/catgrandfa/dsh-token-cost', update: null,
       },
     },

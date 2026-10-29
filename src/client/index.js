@@ -127,6 +127,10 @@ const zh = {
   'calls': '次调用',
   'trend': '每日消费趋势',
   'byHour': '今日分时用量',
+  'viewCost': '花费',
+  'viewTokens': 'Token',
+  'viewCostHint': '按花费查看趋势与分时；悬浮看具体数值',
+  'viewTokensHint': '按 token 查看趋势与分时；悬浮看具体数值',
   'costSplit': '今日成本构成',
   'clickForSplit': '点击可看当天成本构成',
   'byAmount': '按金额占比',
@@ -259,6 +263,10 @@ const en = {
   'calls': 'calls',
   'trend': 'Daily spend',
   'byHour': 'Today by hour',
+  'viewCost': 'Cost',
+  'viewTokens': 'Tokens',
+  'viewCostHint': 'Show trend and hourly by cost; hover for exact values',
+  'viewTokensHint': 'Show trend and hourly by tokens; hover for exact values',
   'costSplit': 'Cost breakdown today',
   'clickForSplit': 'Click a bar to see that day',
   'byAmount': 'share by cost',
@@ -309,6 +317,8 @@ const fmtM = (n) => {
   return (v / 1e6).toFixed(4) + 'M';
 };
 const money = (n) => '¥' + (Number(n) || 0).toFixed(2);
+/** 精确整数（千分位）：tooltip 里回答「具体是多少」，表格里仍用 fmt 的紧凑写法 */
+const fmtExact = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
 const pct = (a, b) => (b > 0 ? (100 * a) / b : 0);
 const hhmm = (ms) => {
   if (!ms) return '—';
@@ -763,7 +773,7 @@ if (typeof document !== 'undefined' && !document.getElementById(LAYOUT_STYLE_ID)
 const h = React.createElement;
 const BLANK_DAY = {
   miss: 0, hit: 0, out: 0, calls: 0, cny: 0, hitRate: null,
-  byHour: new Array(24).fill(0), peakCalls: 0,
+  byHour: new Array(24).fill(0), byHourCny: new Array(24).fill(0), peakCalls: 0,
 };
 
 /** 北京时间 'YYYY-MM-DD' 日键（浏览器半侧；与宿主 core.mjs 的 dayKeyOf 同口径） */
@@ -836,6 +846,20 @@ function TokenMeterPanel(props) {
   const [intervalSec, setIntervalSec] = React.useState(60);
   const { status, data, error, at, refresh } = useSummary(intervalSec);
   const [selDay, setSelDay] = React.useState(null);
+  // 趋势 / 分时的查看口径：花费 or token（悬浮提示两种都给，切换只改图的纵轴与文案）
+  const [metric, setMetric] = React.useState('cny');
+  // 悬浮中的趋势点下标 / 小时（-1 = 没有悬浮）；用 -1 而不是 null，预览垫片能识别并强制出提示
+  const [hoverTrend, setHoverTrend] = React.useState(-1);
+  const [hoverHour, setHoverHour] = React.useState(-1);
+  // 提示卡实际尺寸（宽度 / 图表宽度）：用来把浮层左右夹紧，百分比阈值在窄卡片下会溢出
+  const [tipMetrics, setTipMetrics] = React.useState({ width: 0, parent: 0 });
+  const tipRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const el = tipRef.current;
+    const width = el ? Math.round(el.getBoundingClientRect().width) : 0;
+    const parentWidth = el?.parentElement ? Math.round(el.parentElement.getBoundingClientRect().width) : 0;
+    setTipMetrics((cur) => (cur.width === width && cur.parent === parentWidth ? cur : { width, parent: parentWidth }));
+  });
   const [copied, setCopied] = React.useState('');
   const [showAllSessions, setShowAllSessions] = React.useState(false);
   const [sessionQuery, setSessionQuery] = React.useState('');
@@ -1010,6 +1034,41 @@ function TokenMeterPanel(props) {
   const splitDay = selDay && days[selDay] ? selDay : today;
   const splitTotal = (sHit + sMiss + sOut) > 0 ? (sHit + sMiss + sOut) : ((SD.cny ?? 0) || 1);
 
+  /* ---------------- 悬浮提示（趋势 / 分时共用） ---------------- */
+  // 固定深色浮层：不随主题变，避免浅色主题下用 --dsw-* 变量拼出「深底深字」。
+  const tipBox = {
+    position: 'absolute', zIndex: 6, pointerEvents: 'none', minWidth: 168,
+    maxWidth: 'min(330px, 92%)',
+    padding: '7px 10px', borderRadius: 9,
+    border: '1px solid rgba(255,255,255,.16)',
+    background: 'rgba(17,22,33,.94)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: '0 10px 28px rgba(0,0,0,.38)', fontSize: 11.5, lineHeight: 1.6,
+    color: '#eef1f6', fontVariantNumeric: 'tabular-nums',
+  };
+  const tipLine = (label, value) => h('div', {
+    key: label, style: { display: 'flex', alignItems: 'baseline', gap: 14, justifyContent: 'space-between' },
+  }, [
+    h('span', { key: 'l', style: { color: '#9aa4b8', whiteSpace: 'nowrap' } }, label),
+    h('span', { key: 'v', style: { color: '#f2f5fa', fontWeight: 650, whiteSpace: 'nowrap' } }, value),
+  ]);
+  const tipHead = (text) => h('div', {
+    key: 'head', style: { fontSize: 12, fontWeight: 700, marginBottom: 1, color: '#fff', whiteSpace: 'nowrap' },
+  }, text);
+  const tipNote = (text) => h('div', {
+    key: 'note', style: { color: '#7f8aa0', fontSize: 10.5, marginTop: 2 },
+  }, text);
+  /** 提示卡水平位移：按实测宽度把浮层夹在图表宽度内（宽度未知时退回 -50% 居中） */
+  const tipShift = (xPct) => {
+    const { width, parent } = tipMetrics;
+    if (!width || !parent) return '-50%';
+    const base = (xPct / 100) * parent;
+    const half = width / 2;
+    // 位移后「左边缘 = base + shift、右边缘 = base + shift + width」，夹紧时要按整宽算
+    if (base - half < 4) return `${(4 - base).toFixed(1)}px`;
+    if (base + half > parent - 4) return `${(parent - 4 - base - width).toFixed(1)}px`;
+    return '-50%';
+  };
+
   /* ---------------- 金额窗口 ---------------- */
   // 宿主返回的 days 已合并官方 DeepSeek 用量与本地第三方用量，窗口直接用它
   const daySrc = days;
@@ -1093,14 +1152,45 @@ function TokenMeterPanel(props) {
   const dataDays = window_.filter(({ entry }) => entry && entry.hit + entry.miss + entry.out > 0).length;
   const firstDataIdx = window_.findIndex(({ entry }) => entry && entry.hit + entry.miss + entry.out > 0);
   const trend_ = dataDays > 0 && dataDays < 3 && firstDataIdx > 0 ? window_.slice(firstDataIdx) : window_;
-  const maxHour = Math.max(...(D.byHour ?? [0]), 1);
-  const peakHour = (D.byHour ?? []).indexOf(maxHour);
+  // 分时两种口径：token（官方按小时 token）与花费（官方按小时金额；宿主取不到时按 token 占比分摊当日花费）
+  const hourTokens = Array.from({ length: 24 }, (_, hour) => Number(D.byHour?.[hour] ?? 0));
+  const hourCny = (() => {
+    const raw = Array.isArray(D.byHourCny) ? D.byHourCny.map((v) => Number(v) || 0) : [];
+    if (raw.some((v) => v > 0)) return raw;
+    const total = hourTokens.reduce((sum, v) => sum + v, 0);
+    const target = Number(D.cny) || 0;
+    return hourTokens.map((v) => (total > 0 ? (v / total) * target : 0));
+  })();
+  const hourViews = metric === 'cny' ? hourCny : hourTokens;
+  const maxHour = Math.max(...hourViews, 1e-9);
+  const peakHour = hourViews.indexOf(Math.max(...hourViews));
   const peakHoursToday = (() => {
     const bj = new Date(Date.now() + 8 * 3600e3);
     const dow = bj.getUTCDay();
     const weekend = dow === 0 || dow === 6;
     return Array.from({ length: 24 }, (_, hour) => !weekend && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18)));
   })();
+  /** 柱/标签的当前口径格式化 */
+  const hourText = (v) => (metric === 'cny' ? money(v) : `${fmt(v)} tokens`);
+  const hourViewTotal = hourViews.reduce((sum, v) => sum + v, 0);
+  // 分时花费来源：官方按小时金额可用 → 官方（混有第三方本地估算时标混合）；否则本地估算/按 token 占比分摊。
+  // 守卫：估算值必须标出来源，别让「本地分摊」看起来像官方账单。
+  // 按「今天」判断第三方：daysThirdParty 是稀疏 map（今天没有第三方就没有 today key），
+  // 所以只有整个 map 缺失（老 payload / demo）时才回退到全局 provider 集合；
+  // 金额视角看第三方金额，token 视角看第三方 token（未内置价的第三方模型 cny=0 但有 token）。
+  const todayThirdParty = data.daysThirdParty?.[today];
+  const thirdPartyTokens = (bucket) => Number(bucket?.hit ?? 0) + Number(bucket?.miss ?? 0) + Number(bucket?.out ?? 0);
+  const todayHasThirdParty = data.daysThirdParty
+    ? (metric === 'cny'
+      ? Number(todayThirdParty?.cny ?? 0) > 0
+      : thirdPartyTokens(todayThirdParty) > 0)
+    : hasThirdParty;
+  const hourCostOfficial = Boolean(officialOk
+    && Array.isArray(official?.byHourCny)
+    && official.byHourCny.some((v) => Number(v) > 0));
+  const hourViewSource = (!officialOk || (metric === 'cny' && !hourCostOfficial))
+    ? t('localEstimate')
+    : todayHasThirdParty ? t('mixedShort') : t('fromOfficial');
 
   /* ---------------- 明细窗口 ---------------- */
   const cutoffDay = detailRange === 'today' ? today
@@ -1390,7 +1480,10 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
         }, `${t('totalSpent')} ¥${fmtMoney(balCost)}`) : null,
       ]),
       h('div', { key: 'trend', style: { ...S.card, marginTop: 0, minHeight: 400 } }, [
-      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } }, [
+      h(SectionTitle, { key: 'h', right: h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' } }, [
+        h(Chip, { key: 'mCny', active: metric === 'cny', onClick: () => setMetric('cny'), title: t('viewCostHint') }, t('viewCost')),
+        h(Chip, { key: 'mTok', active: metric === 'tokens', onClick: () => setMetric('tokens'), title: t('viewTokensHint') }, t('viewTokens')),
+        h('span', { key: 'sep', style: { width: 1, height: 14, background: C.border1, margin: '0 2px' } }),
         h(Chip, { key: 'r7', active: range === 7, onClick: () => setRange(7) }, t('range7')),
         h(Chip, { key: 'r30', active: range === 30, onClick: () => setRange(30) }, t('range30')),
         h('span', { key: 'hist', onClick: () => setView('detail'), style: { display: 'inline-flex', alignItems: 'center', lineHeight: 1.2, fontSize: 11.5, color: C.brand, cursor: 'pointer', userSelect: 'none', padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.brand}`, whiteSpace: 'nowrap' } }, t('historyLink')),
@@ -1401,20 +1494,47 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
       ]) }, t('trend')),
       (() => {
         const points = trend_.map(({ key, entry }, index) => {
-          const total = entry ? entry.hit + entry.miss + entry.out : 0;
-          const isToday = key === today;
-          const tooltip = entry
-            ? `${key}${isToday ? ` · ${t('today')}` : ''}\n${t('cost')} ${money(entry.cny)} · ${entry.calls} ${t('calls')}\n${t('hitInput')} ${fmt(entry.hit)} · ${t('missInput')} ${fmt(entry.miss)} · ${t('output')} ${fmt(entry.out)}`
-            : `${key} · ${t('zeroDays')}`;
-          return { key, index, total, cny: Number(entry?.cny ?? 0), isToday, tooltip };
+          const tokens = entry ? entry.hit + entry.miss + entry.out : 0;
+          const cny = Number(entry?.cny ?? 0);
+          return {
+            key, index, entry, cny, tokens, isToday: key === today,
+            calls: Number(entry?.calls ?? 0),
+            value: metric === 'cny' ? cny : tokens,
+          };
         });
-        const maxY = Math.max(...points.map((p) => p.cny), 1e-9) * 1.12;
+        const maxY = Math.max(...points.map((p) => p.value), 1e-9) * 1.12;
         const W = 100, H = 44;
         const xOf = (i) => (points.length > 1 ? (i / (points.length - 1)) * W : W / 2);
         const yOf = (v) => H - (v / maxY) * H;
-        const line = points.map((p) => `${xOf(p.index).toFixed(2)},${yOf(p.cny).toFixed(2)}`).join(' ');
+        const line = points.map((p) => `${xOf(p.index).toFixed(2)},${yOf(p.value).toFixed(2)}`).join(' ');
         const isActive = (p) => (selDay ? selDay === p.key : p.isToday);
-        return h('div', { key: 'chart', style: { position: 'relative', height: 116, marginTop: 10 } }, [
+        const hovered = hoverTrend >= 0 && hoverTrend < points.length ? points[hoverTrend] : null;
+        const hoverX = hovered ? xOf(hovered.index) : 0;
+        const hoverY = hovered ? (yOf(hovered.value) / H) * 100 : 0;
+        /** 指针位置 → 最近的一天（点太小，只悬浮点很难命中） */
+        const indexAt = (e) => {
+          const rect = e.currentTarget?.getBoundingClientRect?.();
+          if (!rect?.width) return null;
+          const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+          return points.length > 1 ? Math.round(ratio * (points.length - 1)) : 0;
+        };
+        const pickDay = (key) => setSelDay(selDay === key ? null : key);
+        return h('div', {
+          key: 'chart',
+          style: { position: 'relative', height: 116, marginTop: 10, cursor: 'pointer' },
+          onMouseMove: (e) => {
+            const index = indexAt(e);
+            if (index == null) return;
+            setHoverTrend(index);
+          },
+          onMouseLeave: () => setHoverTrend(-1),
+          // 点击同样取最近的一天：整张图都能选，不必精准点中 5px 圆点
+          onClick: (e) => {
+            const index = indexAt(e);
+            const picked = index == null ? null : points[index];
+            if (picked) pickDay(picked.key);
+          },
+        }, [
           h('svg', {
             key: 'svg', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none',
             width: '100%', height: '100%', style: { display: 'block', overflow: 'visible' },
@@ -1435,16 +1555,33 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
           ]),
           ...points.map((p) => h('div', {
             key: `p-${p.key}`,
-            title: `${p.tooltip}\n${t('clickForSplit')}`,
-            onClick: () => setSelDay(selDay === p.key ? null : p.key),
             style: {
               position: 'absolute', left: `calc(${xOf(p.index).toFixed(2)}% - 3px)`,
-              top: `calc(${((yOf(p.cny) / H) * 100).toFixed(2)}% - 3px)`,
+              top: `calc(${((yOf(p.value) / H) * 100).toFixed(2)}% - 3px)`,
               width: isActive(p) ? 7 : 5, height: isActive(p) ? 7 : 5, borderRadius: '50%',
-              background: isActive(p) ? C.brand : C.hit, opacity: p.total > 0 ? 1 : 0.25,
-              cursor: 'pointer', zIndex: 2,
+              background: isActive(p) ? C.brand : C.hit, opacity: p.tokens > 0 ? 1 : 0.25,
+              pointerEvents: 'none', zIndex: 2,
             },
           })),
+          // 浮动提示：两种口径一起给 —— 用户不用为了看另一个数先切视角
+          hovered ? h('div', {
+            key: 'tip',
+            ref: tipRef,
+            style: {
+              ...tipBox,
+              left: `${hoverX}%`, top: `${hoverY}%`,
+              transform: `translate(${tipShift(hoverX)}, ${hoverY < 44 ? '14px' : 'calc(-100% - 12px)'})`,
+            },
+          }, [
+            tipHead(`${hovered.key}${hovered.isToday ? ` · ${t('today')}` : ''}`),
+            tipLine(t('cost'), money(hovered.cny)),
+            tipLine(t('totalTokens'), fmtExact(hovered.tokens)),
+            hovered.entry && hovered.tokens > 0 ? h('div', {
+              key: 'mix', style: { color: '#9aa4b8', fontSize: 10.5, marginTop: 1 },
+            }, `${t('hitInput')} ${fmtExact(hovered.entry.hit)} · ${t('missInput')} ${fmtExact(hovered.entry.miss)} · ${t('output')} ${fmtExact(hovered.entry.out)}`) : null,
+            hovered.tokens > 0 ? tipLine(t('calls'), fmtExact(hovered.calls)) : null,
+            tipNote(hovered.tokens > 0 ? t('clickForSplit') : t('zeroDays')),
+          ]) : null,
         ]);
       })(),
       h('div', {
@@ -1461,21 +1598,54 @@ h('div', { key: 'spend', style: { ...S.panel, display: 'flex', flexDirection: 'c
       h('div', { key: 'hr', style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border1}` } }, [
         h('div', { key: 'hh', style: { display: 'flex', alignItems: 'center', fontSize: 12.5, color: C.label3, gap: 8 } }, [
           h('span', { key: 't', style: { fontWeight: 650, color: C.label2 } }, t('byHour')),
+          h('span', {
+            key: 'u',
+            style: { fontSize: 11, color: C.label3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '0 7px', lineHeight: 1.5 },
+          }, `${metric === 'cny' ? t('viewCost') : t('viewTokens')} · ${hourViewSource}`),
           h('span', { key: 'sp', style: { flex: 1 } }),
-          h('span', { key: 'p' }, `${String(peakHour).padStart(2, '0')}:00 · ${t('peakHourLabel')} ${fmt(maxHour)} tokens`),
+          h('span', { key: 'p' }, hourViewTotal > 0
+            ? `${String(peakHour).padStart(2, '0')}:00 · ${t('peakHourLabel')} ${hourText(hourViews[peakHour] ?? 0)}`
+            : `${t('peakHourLabel')} —`),
         ]),
-        h('div', { key: 'bars', style: { position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 42, marginTop: 22 } }, [
+        h('div', {
+          key: 'bars',
+          style: { position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 2, height: 42, marginTop: 22 },
+          onMouseLeave: () => setHoverHour(-1),
+        }, [
           ...[50, 100].map((p) => h('div', { key: `grid${p}`, style: { position: 'absolute', left: 0, right: 0, bottom: `${p}%`, borderTop: `1px dashed ${C.border1}`, pointerEvents: 'none' } })),
           ...Array.from({ length: 24 }, (_, hour) => h('div', {
             key: hour,
-            title: `${String(hour).padStart(2, '0')}:00 · ${fmt(D.byHour?.[hour] ?? 0)} tokens`,
             style: {
               position: 'relative', zIndex: 1, flex: 1, minHeight: 2,
-              height: `${Math.max(((D.byHour?.[hour] ?? 0) / maxHour) * 100, 1.5)}%`,
+              height: `${Math.max((hourViews[hour] / maxHour) * 100, 1.5)}%`,
               background: peakHoursToday[hour] ? C.miss : C.hit,
               opacity: hour === peakHour ? 1 : 0.72, borderRadius: '2px 2px 0 0',
             },
           })),
+          // 整列命中区：柱子再矮也能悬浮（鼠标进入某一列就切到那个小时）
+          ...Array.from({ length: 24 }, (_, hour) => h('div', {
+            key: `hover-${hour}`,
+            onMouseEnter: () => setHoverHour(hour),
+            style: {
+              position: 'absolute', top: 0, bottom: 0, left: `${(hour / 24) * 100}%`, width: `${100 / 24}%`,
+              zIndex: 3, cursor: 'crosshair',
+            },
+          })),
+          hoverHour >= 0 && hoverHour < 24 ? h('div', {
+            key: 'tip',
+            ref: tipRef,
+            style: {
+              ...tipBox,
+              left: `${((hoverHour + 0.5) / 24) * 100}%`,
+              bottom: 'calc(100% + 10px)',
+              transform: `translate(${tipShift(((hoverHour + 0.5) / 24) * 100)}, 0)`,
+            },
+          }, [
+            tipHead(`${String(hoverHour).padStart(2, '0')}:00–${String(hoverHour + 1).padStart(2, '0')}:00`),
+            tipLine(t('cost'), money(hourCny[hoverHour] ?? 0)),
+            tipLine(t('totalTokens'), fmtExact(hourTokens[hoverHour] ?? 0)),
+            tipNote(`${peakHoursToday[hoverHour] ? t('peakShort') : t('offShort')} · ${hourViewSource}`),
+          ]) : null,
         ]),
         h('div', { key: 'ax', style: { display: 'flex', gap: 2, fontSize: 10, color: C.label3, marginTop: 4 } },
           Array.from({ length: 24 }, (_, hour) => h('span', {

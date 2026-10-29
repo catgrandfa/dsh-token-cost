@@ -70,6 +70,10 @@ try {
     const b = bucket(data);
     check('calls', b.calls, 1);
     check('cny', Number(b.cny.toFixed(2)), 5.02);
+    // 分时花费：调用发生在周六 10:00（空闲档），金额应落在 10 点这一格
+    const day = Object.values(data.days)[0];
+    check('byHourCny 落在调用发生的 10 点', Number((day.byHourCny?.[10] ?? 0).toFixed(2)), 5.02);
+    check('byHourCny 其余小时为 0', Number(day.byHourCny.filter((v, h) => h !== 10).reduce((a, v) => a + v, 0).toFixed(6)), 0);
   }
 
   console.log('-- 2) v3 + v4：必须只取 v4（v3 是过期快照，取 v3 就会丢新用量）');
@@ -170,6 +174,11 @@ try {
     check('复用后 cny 一致', bucket(second).cny, bucket(first).cny);
     check('复用后 sessions 数一致', Object.keys(second.sessions).length, Object.keys(first.sessions).length);
     check('复用后 byHour 一致', JSON.stringify(Object.values(second.days).map((d) => d.byHour)), JSON.stringify(Object.values(first.days).map((d) => d.byHour)));
+    check('复用后 byHourCny 一致', JSON.stringify(Object.values(second.days).map((d) => d.byHourCny)), JSON.stringify(Object.values(first.days).map((d) => d.byHourCny)));
+    // 只比「两次都丢」是抓不到 mergeBucket 漏合并的 —— 再钉一条非 0 断言
+    const reusedHourCny = Object.values(second.days)
+      .reduce((sum, d) => sum + (d.byHourCny ?? []).reduce((acc, v) => acc + v, 0), 0);
+    check('复用后 byHourCny 非 0', reusedHourCny > 0, true);
 
     // 只动一个文件：只有它需要重算
     writeLog(join(dir2, 'session.v4.jsonl.zstd'), [a, a, a, a]);

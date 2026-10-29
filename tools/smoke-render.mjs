@@ -27,13 +27,22 @@ const READY = {
   days: {
     '2026-10-15': {
       hit: 41e6, miss: 2.5e5, out: 2.3e5, calls: 187, cny: 2.01, hitRate: 99.4,
-      byHour: new Array(24).fill(1e6), peakCalls: 0,
+      // token 均匀分布、花费集中在 10 点：两个视角的分时柱高必须不同
+      byHour: new Array(24).fill(1e6),
+      byHourCny: Array.from({ length: 24 }, (_, hour) => (hour === 10 ? 1.0 : (2.01 - 1.0) / 23)),
+      peakCalls: 0,
       tier: { peak: { cny: 0, calls: 0 }, offPeak: { cny: 2.01, calls: 187 } },
+    },
+    // 第二天：花费 / token 的比值与今天不同 —— 两个视角的趋势折线形状必须不同
+    '2026-10-14': {
+      hit: 10e6, miss: 1e6, out: 1e6, calls: 90, cny: 1.0, hitRate: 90.9,
+      byHour: new Array(24).fill(0), byHourCny: new Array(24).fill(1.0 / 24), peakCalls: 10,
+      tier: { peak: { cny: 0, calls: 0 }, offPeak: { cny: 1.0, calls: 90 } },
     },
   },
   // 第三方渠道贡献（用于「渠道拆分」卡与明细窗口内的 provider 汇总）
   daysThirdParty: {
-    '2026-10-15': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4, byHour: new Array(24).fill(0) },
+    '2026-10-15': { hit: 1e6, miss: 1e5, out: 1e5, calls: 5, cny: 0.4, byHour: new Array(24).fill(0), byHourCny: new Array(24).fill(0) },
   },
   // 工具调用（Search）单独计费：11/1 前免费，只记成功调用次数
   daysSearch: {
@@ -63,12 +72,24 @@ const NO_BUDGET = {
   config: { ...READY.config, dailyBudget: 0, monthlyBudget: 0 },
   localDays: READY.days,
 };
+/** 旧宿主没有 byHourCny（全 0）：客户端要按 token 占比回退，不能崩 */
+const NO_HOUR = {
+  ...READY,
+  days: {
+    '2026-10-15': { ...READY.days['2026-10-15'], byHourCny: undefined, byHour: new Array(24).fill(0) },
+  },
+};
 let ACTIVE = READY;
 let FORCED_VIEW = null;
 /** 首屏 loading 分支（骨架屏）也必须能渲染：曾因骨架引用未初始化的皮肤对象而崩溃 */
 let FORCED_LOADING = false;
 /** 明细窗口状态在真实面板里由 chip 切换；闸门逐个窗口渲染，覆盖所有分支 */
 let FORCED_DETAIL = null;
+/** 趋势/分时的查看口径（初值 'cny'）：闸门也渲染一次 Token 视角，覆盖另一个分支 */
+let FORCED_METRIC = null;
+/** 悬浮状态（初值 -1）：闸门强制 hover，覆盖 tooltip 渲染分支；null = 不悬浮 */
+let FORCED_HOVER = null;
+let hoverStateIndex = 0;
 
 const React = {
   createElement: (type, props, ...children) => ({
@@ -82,6 +103,14 @@ const React = {
     if (init === 'overview') return [FORCED_VIEW ?? 'overview', () => {}];
     // 明细窗口状态（初值 'today'）同样逐个强制，覆盖 近7天/近30天/月/季/年 分支
     if (init === 'today') return [FORCED_DETAIL ?? 'today', () => {}];
+    // 查看口径（初值 'cny'）强制切一次，覆盖 Token 视角分支
+    if (init === 'cny') return [FORCED_METRIC ?? 'cny', () => {}];
+    // 悬浮状态（初值 -1）：trend / hour 两个状态按 hook 顺序区分，强制出 tooltip 分支
+    if (init === -1) {
+      hoverStateIndex += 1;
+      const forced = FORCED_HOVER ?? { trend: -1, hour: -1 };
+      return [hoverStateIndex === 1 ? forced.trend : forced.hour, () => {}];
+    }
     const value = typeof init === 'function' ? init() : init;
     if (value && typeof value === 'object' && 'status' in value && 'data' in value) {
       if (FORCED_LOADING) return [{ status: 'loading', data: null, error: null, at: 0, refresh() {}, reload() {} }, () => {}];
@@ -132,6 +161,10 @@ if (!panel) {
 let visited = 0;
 /** 收集渲染树里出现的文本：翻译函数在闸门里返回 key，可用来断言文案真的渲染了 */
 let seenText = new Set();
+/** 收集 SVG 折线/面积的点串：花费视角与 Token 视角的纵轴不同，点串必须不同 */
+let seenPoints = new Set();
+/** 收集分时柱高度（key 为 0..23 的柱）：两个视角必须按各自的分时数组重算 */
+let seenBars = new Set();
 const walk = (node) => {
   if (node === null || node === undefined || node === false || node === true) return;
   if (Array.isArray(node)) { node.forEach(walk); return; }
@@ -139,12 +172,30 @@ const walk = (node) => {
   if (typeof node !== 'object') return;
   visited += 1;
   const { type, props } = node;
-  if (typeof type === 'function') { walk(type({ ...props, t: (k) => k, useProjection: undefined })); return; }
+  if (props && typeof props.points === 'string') seenPoints.add(props.points);
+  if (props && typeof props.key === 'number' && props.key >= 0 && props.key <= 23
+    && props.style && typeof props.style.height === 'string') {
+    seenBars.add(props.style.height);
+  }
+  if (typeof type === 'function') { walk(type({ ...props, children: node.children, t: (k) => k, useProjection: undefined })); return; }
   walk(node.children);
 };
 
 let totalVisited = 0;
+/** 跑一次面板渲染，重置计数器/收集容器（含悬浮状态在 hook 顺序里的计数） */
+const runWalk = () => {
+  hoverStateIndex = 0;
+  visited = 0;
+  seenText = new Set();
+  seenPoints = new Set();
+  seenBars = new Set();
+  walk(panel({ t: (k) => k, useProjection: undefined }));
+  totalVisited += visited;
+};
 const DETAIL_RANGES = ['today', '7d', '30d', 'month', 'quarter', 'year'];
+/** 花费视角的折线点串 / 分时柱高：Token 视角必须重算，否则两个视角图形一样 */
+let costModePoints = new Set();
+let costModeBars = new Set();
 try {
   for (const view of ['overview', 'detail', 'export']) {
     FORCED_VIEW = view;
@@ -152,11 +203,16 @@ try {
     const ranges = view === 'detail' ? DETAIL_RANGES : [null];
     for (const detailRange of ranges) {
       FORCED_DETAIL = detailRange;
-      visited = 0;
-      seenText = new Set();
-      walk(panel({ t: (k) => k, useProjection: undefined }));
-      totalVisited += visited;
+      runWalk();
       if (view === 'overview') {
+        // 花费视角的峰值文案按金额（Token 视角会变成 tokens，见下面断言）
+        const peakCaption = [...seenText].find((s) => s.includes('peakHourLabel'));
+        if (!peakCaption || !peakCaption.includes('¥')) {
+          console.error(`FAIL: 花费视角的分时峰值文案没有按金额展示（实际 ${JSON.stringify(peakCaption)}）`);
+          process.exit(1);
+        }
+        costModePoints = new Set(seenPoints);
+        costModeBars = new Set(seenBars);
         // 渠道拆分：账号额度与 API Key 必须各占一行；合并回「官方渠道」一行时这里会变红
         for (const key of ['accountQuota', 'apiKeyQuota']) {
           if (!seenText.has(key)) {
@@ -169,23 +225,68 @@ try {
           console.error('FAIL: 渠道拆分缺少「工具调用 Search」单独计费的一行');
           process.exit(1);
         }
+        // 趋势 / 分时图的「花费 / Token」视角切换必须在（删掉切换 chip 时这里变红）
+        for (const key of ['viewCost', 'viewTokens']) {
+          if (!seenText.has(key)) {
+            console.error(`FAIL: 趋势/分时缺少「花费 / Token」视角切换（缺 ${key}）`);
+            process.exit(1);
+          }
+        }
       }
     }
   }
+  // Token 视角分支：两张图改按 token 口径渲染，且必须真的换口径（不能只是渲染不炸）
+  FORCED_VIEW = 'overview';
+  FORCED_METRIC = 'tokens';
+  runWalk();
+  const tokenPeak = [...seenText].find((s) => s.includes('peakHourLabel'));
+  if (!tokenPeak || !tokenPeak.includes('tokens')) {
+    console.error(`FAIL: Token 视角的分时峰值文案没有换成 token（实际 ${JSON.stringify(tokenPeak)}）`);
+    process.exit(1);
+  }
+  if (JSON.stringify([...seenPoints]) === JSON.stringify([...costModePoints])) {
+    console.error('FAIL: 趋势折线在两个视角下点串相同 —— metric 没有接到趋势纵轴');
+    process.exit(1);
+  }
+  if (JSON.stringify([...seenBars]) === JSON.stringify([...costModeBars])) {
+    console.error('FAIL: 分时柱在两个视角下高度相同 —— metric 没有接到分时数组');
+    process.exit(1);
+  }
+  FORCED_METRIC = null;
   FORCED_DETAIL = null;
+  // 悬浮提示：强制 hover 后 tooltip 内容必须真的渲染（日期、金额、精确 token、命中构成、点击提示）
+  ACTIVE = READY;
+  FORCED_HOVER = { trend: 1, hour: 10 };
+  runWalk();
+  const tipHead = [...seenText].find((s) => s.startsWith('2026-10-15 · '));
+  const hasExactTokens = [...seenText].some((s) => /^\d{1,3}(,\d{3})+$/.test(s));
+  if (!tipHead || !seenText.has('totalTokens') || !hasExactTokens || !seenText.has('clickForSplit')) {
+    console.error(`FAIL: 悬浮提示没有渲染（head=${JSON.stringify(tipHead)} exact=${hasExactTokens}）`);
+    process.exit(1);
+  }
+  if (!seenText.has('¥2.01')) {
+    console.error('FAIL: 悬浮提示里没有当天花费');
+    process.exit(1);
+  }
+  // 旧数据没有 byHourCny：分时花费回退不能崩，且无数据时峰值文案显示「—」
+  ACTIVE = NO_HOUR;
+  FORCED_HOVER = { trend: 0, hour: 10 };
+  runWalk();
+  if (!seenText.has('peakHourLabel —') || !seenText.has('¥0.00')) {
+    console.error('FAIL: 缺少 byHourCny 时回退渲染不正确');
+    process.exit(1);
+  }
+  FORCED_HOVER = null;
+  ACTIVE = READY;
   // 首屏 loading（骨架屏）分支
   FORCED_LOADING = true;
   FORCED_VIEW = 'overview';
-  visited = 0;
-  walk(panel({ t: (k) => k, useProjection: undefined }));
-  totalVisited += visited;
+  runWalk();
   FORCED_LOADING = false;
   // 无预算（只记录花费）分支
   FORCED_VIEW = 'overview';
   ACTIVE = NO_BUDGET;
-  visited = 0;
-  walk(panel({ t: (k) => k, useProjection: undefined }));
-  totalVisited += visited;
+  runWalk();
 } catch (error) {
   console.error(`FAIL: 有数据状态渲染抛错 -> ${error?.message ?? error}`);
   console.error(String(error?.stack ?? '').split('\n').slice(1, 5).join('\n'));

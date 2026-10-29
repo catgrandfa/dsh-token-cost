@@ -408,23 +408,56 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
     console.log('\n-- 官方用量（账号会话，免登录） --');
     const realFetch = globalThis.fetch;
     const hits = [];
+    // 造「今天」的官方数据：日窗口按天、当天窗口按小时（与平台接口的桶粒度一致）。
+    // 今日 9 点花了 0.5、10 点花了 4.52 → 分时花费应直接采用官方金额（不是本地估算）。
+    const TZ = 8 * 3600;
+    const nowMs = Date.now();
+    const dayStartSec = Math.floor((nowMs + TZ * 1000) / 86400000) * 86400 - TZ;
+    const usage = { PROMPT_CACHE_HIT_TOKEN: 1e6, PROMPT_CACHE_MISS_TOKEN: 1e6, RESPONSE_TOKEN: 1e6, REQUEST: 1 };
     globalThis.fetch = async (url, init) => {
       const target = String(url);
       if (!target.includes('/api/v0/usage/by_api_key/')) throw new Error(`unexpected fetch: ${target}`);
       hits.push(init?.headers?.['x-dsh-auth-token']);
-      return {
-        ok: true, status: 200,
-        json: async () => ({ code: 0, data: { biz_code: 0, biz_data: { start: 1, end: 2, bucket: 86400, models: ['deepseek-flash'], series: [], data: [{ currency: 'CNY', series: [] }] } } }),
-      };
+      const params = new URL(target).searchParams;
+      const todayWindow = Number(params.get('start')) + 86400 >= Number(params.get('end'));
+      const isCost = target.includes('/cost?');
+      let bizData;
+      if (!isCost) {
+        // amount 接口的桶在 biz_data.series（cost 接口在 biz_data.data[].series）—— 与宿主解析保持一致
+        bizData = todayWindow
+          ? { start: 0, end: 0, bucket: 3600, models: ['deepseek-flash'], series: [{ buckets: [{ time: dayStartSec + 10 * 3600, usage }] }], data: [{ currency: 'CNY', series: [] }] }
+          : { start: 0, end: 0, bucket: 86400, models: ['deepseek-flash'], series: [{ buckets: [{ time: dayStartSec, usage }] }], data: [{ currency: 'CNY', series: [] }] };
+      } else {
+        bizData = todayWindow
+          ? { start: 0, end: 0, bucket: 3600, models: ['deepseek-flash'], series: [], data: [{ currency: 'CNY', series: [{ buckets: [{ time: dayStartSec + 9 * 3600, cost: 0.5 }, { time: dayStartSec + 10 * 3600, cost: 4.52 }] }] }] }
+          : { start: 0, end: 0, bucket: 86400, models: ['deepseek-flash'], series: [], data: [{ currency: 'CNY', series: [{ buckets: [{ time: dayStartSec, cost: 5.02 }] }] }] };
+      }
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: { biz_code: 0, biz_data: bizData } }) };
     };
+    const fmtY = (v) => Number(v ?? 0).toFixed(2);
+    // 会话目录里放一条第三方（pi-ai）调用：验证「官方按小时金额 + 第三方本地花费」同一天合并
+    const root = join(tmpdir(), `dsh-token-cost-official-${process.pid}`);
+    const sessionDir = join(root, 'ws-official', 'sess-official');
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(join(sessionDir, 'session.jsonl'), [
+      { type: 'session', id: 'sess-official', createdAt: dayStartSec * 1000 + 3 * 3600e3, delegationDepth: 0 },
+      {
+        type: 'assistant/message', time: dayStartSec * 1000 + 3 * 3600e3 + 60e3,
+        data: {
+          usage: { inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0 },
+          message: { source: { provider: 'pi-ai', model: 'glm-5.3' } },
+        },
+      },
+    ].map((r) => JSON.stringify(r)).join('\n'));
     try {
       const { ctx: ctxG, routes: rG } = newCtx({
+        settings: { officialOnly: false },
         account: {
           async getBalance() { return { status: 'ready', value: [{ currency: 'CNY', balance: '5' }], bonusWallets: [] }; },
           async getPlatformSession() { return { origin: 'https://platform.deepseek.com', token: 'acct-session-token', requestHeaders: {} }; },
         },
       });
-      await mod.apply(ctxG, {});
+      await mod.apply(ctxG, { sessionsRoot: root });
       await new Promise((r) => setTimeout(r, 60));
       await callRoute(rG, '/summary', '/token-cost/summary?refresh=1');
       await new Promise((r) => setTimeout(r, 300));
@@ -433,11 +466,147 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
       const ok = off.ok === true && off.auth === 'account' && hits.length > 0 && hits.every((h) => h === 'acct-session-token');
       console.log(`  ${ok ? 'PASS' : 'FAIL'} official.ok=${off.ok} auth=${off.auth} reason=${off.reason ?? '-'} 请求数=${hits.length}`);
       if (!ok) smokeFailures += 1;
+      // 分时花费：官方按小时金额优先（9 点 0.5 + 10 点 4.52），第三方本地花费按自己的小时并入；
+      // 分时合计必须等于合并后的当日花费（官方 5.02 + GLM 第三方）。
+      const today = got.payload?.days?.[got.payload?.today];
+      const hourCny = today?.byHourCny ?? [];
+      const hourSum = hourCny.reduce((a, v) => a + v, 0);
+      const thirdCny = Number(((today?.cny ?? 0) - 5.02).toFixed(6));
+      const adoptOk = Array.isArray(off.byHourCny)
+        && Math.abs((hourCny[9] ?? 0) - 0.5) < 1e-6
+        && Math.abs((hourCny[10] ?? 0) - 4.52) < 1e-6
+        && Math.abs((hourCny[3] ?? 0) - thirdCny) < 0.01
+        && Math.abs(hourSum - (today?.cny ?? 0)) < 0.01;
+      console.log(`  ${adoptOk ? 'PASS' : 'FAIL'} 官方按小时金额 + 第三方合并：9点=¥${fmtY(hourCny[9])} 10点=¥${fmtY(hourCny[10])} 3点(第三方)=¥${fmtY(hourCny[3])} 合计=¥${fmtY(hourSum)}（当日 ¥${fmtY(today?.cny)}）`);
+      if (!adoptOk) smokeFailures += 1;
     } catch (error) {
       console.log(`  FAIL 官方用量（账号会话）：${error?.message ?? error}`);
       smokeFailures += 1;
     } finally {
       globalThis.fetch = realFetch;
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  // ---- 官方分时花费：当天窗口若按天返回（多个 series 各一个日桶），必须拒绝 ----
+  {
+    console.log('\n-- 官方分时花费：按天桶必须拒绝 --');
+    const realFetch = globalThis.fetch;
+    const TZ = 8 * 3600;
+    const nowMs = Date.now();
+    const dayStartSec = Math.floor((nowMs + TZ * 1000) / 86400000) * 86400 - TZ;
+    const usage = { PROMPT_CACHE_HIT_TOKEN: 1e6, PROMPT_CACHE_MISS_TOKEN: 1e6, RESPONSE_TOKEN: 1e6, REQUEST: 1 };
+    globalThis.fetch = async (url) => {
+      const target = String(url);
+      if (!target.includes('/api/v0/usage/by_api_key/')) throw new Error(`unexpected fetch: ${target}`);
+      const params = new URL(target).searchParams;
+      const todayWindow = Number(params.get('start')) + 86400 >= Number(params.get('end'));
+      const isCost = target.includes('/cost?');
+      let bizData;
+      if (!isCost) {
+        bizData = todayWindow
+          ? { start: 0, end: 0, bucket: 3600, models: [], series: [{ buckets: [{ time: dayStartSec + 10 * 3600, usage }] }], data: [{ currency: 'CNY', series: [] }] }
+          : { start: 0, end: 0, bucket: 86400, models: [], series: [{ buckets: [{ time: dayStartSec, usage }] }], data: [{ currency: 'CNY', series: [] }] };
+      } else {
+        // 当天窗口退回按天桶：两个 series 各一个 0 点桶（旧实现按「桶数 ≥2」会误判成按小时）
+        bizData = todayWindow
+          ? {
+            start: 0, end: 0, bucket: 86400, models: [], series: [], data: [
+              { currency: 'CNY', series: [{ buckets: [{ time: dayStartSec, cost: 2.5 }] }] },
+              { currency: 'CNY', series: [{ buckets: [{ time: dayStartSec, cost: 2.52 }] }] },
+            ],
+          }
+          : { start: 0, end: 0, bucket: 86400, models: [], series: [], data: [{ currency: 'CNY', series: [{ buckets: [{ time: dayStartSec, cost: 5.02 }] }] }] };
+      }
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: { biz_code: 0, biz_data: bizData } }) };
+    };
+    const root = join(tmpdir(), `dsh-token-cost-daily-bucket-${process.pid}`);
+    mkdirSync(root, { recursive: true });
+    try {
+      const { ctx: ctxG, routes: rG } = newCtx({
+        account: {
+          async getBalance() { return { status: 'ready', value: [{ currency: 'CNY', balance: '5' }], bonusWallets: [] }; },
+          async getPlatformSession() { return { origin: 'https://platform.deepseek.com', token: 'acct-session-token', requestHeaders: {} }; },
+        },
+      });
+      await mod.apply(ctxG, { sessionsRoot: root });
+      await new Promise((r) => setTimeout(r, 60));
+      await callRoute(rG, '/summary', '/token-cost/summary?refresh=1');
+      await new Promise((r) => setTimeout(r, 300));
+      const got = await callRoute(rG, '/summary', '/token-cost/summary');
+      const off = got.payload?.official ?? {};
+      const today = got.payload?.days?.[got.payload?.today];
+      const hourCny = today?.byHourCny ?? [];
+      const hourSum = hourCny.reduce((a, v) => a + v, 0);
+      // 拒绝后回退：按合并后的分时 token 占比分摊（mock 的 token 都在 10 点）
+      const rejectOk = off.ok === true && off.byHourCny === null
+        && Math.abs(hourCny[0] ?? 0) < 1e-9
+        && Math.abs((hourCny[10] ?? 0) - 5.02) < 0.01
+        && Math.abs(hourSum - (today?.cny ?? 0)) < 0.01;
+      console.log(`  ${rejectOk ? 'PASS' : 'FAIL'} 按天桶被拒（official.byHourCny=${JSON.stringify(off.byHourCny)}），回退按 token 占比：0点=¥${(hourCny[0] ?? 0).toFixed(2)} 10点=¥${(hourCny[10] ?? 0).toFixed(2)} 合计=¥${hourSum.toFixed(2)}`);
+      if (!rejectOk) smokeFailures += 1;
+    } catch (error) {
+      console.log(`  FAIL 官方分时花费（按天桶）：${error?.message ?? error}`);
+      smokeFailures += 1;
+    } finally {
+      globalThis.fetch = realFetch;
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  // ---- 官方分时花费：bucket 字段缺失时，多小时桶仍可采用（兜底启发式）----
+  {
+    console.log('\n-- 官方分时花费：缺 bucket 字段的兜底 --');
+    const realFetch = globalThis.fetch;
+    const TZ = 8 * 3600;
+    const nowMs = Date.now();
+    const dayStartSec = Math.floor((nowMs + TZ * 1000) / 86400000) * 86400 - TZ;
+    const usage = { PROMPT_CACHE_HIT_TOKEN: 1e6, PROMPT_CACHE_MISS_TOKEN: 1e6, RESPONSE_TOKEN: 1e6, REQUEST: 1 };
+    globalThis.fetch = async (url) => {
+      const target = String(url);
+      const params = new URL(target).searchParams;
+      const todayWindow = Number(params.get('start')) + 86400 >= Number(params.get('end'));
+      const isCost = target.includes('/cost?');
+      // 故意不写 bucket 字段：线上接口若少字段，应退回「≥2 个不同小时」的启发式而不是永远不采用
+      let bizData;
+      if (!isCost) {
+        bizData = todayWindow
+          ? { start: 0, end: 0, models: [], series: [{ buckets: [{ time: dayStartSec + 10 * 3600, usage }] }], data: [{ currency: 'CNY', series: [] }] }
+          : { start: 0, end: 0, models: [], series: [{ buckets: [{ time: dayStartSec, usage }] }], data: [{ currency: 'CNY', series: [] }] };
+      } else {
+        bizData = todayWindow
+          ? { start: 0, end: 0, models: [], series: [], data: [{ currency: 'CNY', series: [{ buckets: [{ time: dayStartSec + 9 * 3600, cost: 0.5 }, { time: dayStartSec + 10 * 3600, cost: 4.52 }] }] }] }
+          : { start: 0, end: 0, models: [], series: [], data: [{ currency: 'CNY', series: [{ buckets: [{ time: dayStartSec, cost: 5.02 }] }] }] };
+      }
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: { biz_code: 0, biz_data: bizData } }) };
+    };
+    const root = join(tmpdir(), `dsh-token-cost-no-bucket-${process.pid}`);
+    mkdirSync(root, { recursive: true });
+    try {
+      const { ctx: ctxN, routes: rN } = newCtx({
+        account: {
+          async getBalance() { return { status: 'ready', value: [{ currency: 'CNY', balance: '5' }], bonusWallets: [] }; },
+          async getPlatformSession() { return { origin: 'https://platform.deepseek.com', token: 'acct-session-token', requestHeaders: {} }; },
+        },
+      });
+      await mod.apply(ctxN, { sessionsRoot: root });
+      await new Promise((r) => setTimeout(r, 60));
+      await callRoute(rN, '/summary', '/token-cost/summary?refresh=1');
+      await new Promise((r) => setTimeout(r, 300));
+      const got = await callRoute(rN, '/summary', '/token-cost/summary');
+      const today = got.payload?.days?.[got.payload?.today];
+      const hourCny = today?.byHourCny ?? [];
+      const adoptOk = Array.isArray(got.payload?.official?.byHourCny)
+        && Math.abs((hourCny[9] ?? 0) - 0.5) < 1e-6
+        && Math.abs((hourCny[10] ?? 0) - 4.52) < 1e-6;
+      console.log(`  ${adoptOk ? 'PASS' : 'FAIL'} 缺 bucket 字段仍按多小时采用：9点=¥${(hourCny[9] ?? 0).toFixed(2)} 10点=¥${(hourCny[10] ?? 0).toFixed(2)}`);
+      if (!adoptOk) smokeFailures += 1;
+    } catch (error) {
+      console.log(`  FAIL 官方分时花费（缺 bucket 字段）：${error?.message ?? error}`);
+      smokeFailures += 1;
+    } finally {
+      globalThis.fetch = realFetch;
+      rmSync(root, { recursive: true, force: true });
     }
   }
 
@@ -493,6 +662,11 @@ console.log(`\nafter dispose: routes=${routes.length} (expect 0)`);
       && Math.abs((data.providers?.['pi-ai']?.cny ?? 0) - 8) < 1e-6;
     console.log(`  ${ok ? 'PASS' : 'FAIL'} meterSource=${data?.meterSource} todayCny=${today?.cny} pi-ai=¥${data?.providers?.['pi-ai']?.cny}（官方 0 + GLM 8）`);
     if (!ok) smokeFailures += 1;
+    // 官方没给按小时金额时，分时花费按本地估算，并归一到合并后的当日金额
+    const hourSum = (today?.byHourCny ?? []).reduce((a, v) => a + v, 0);
+    const hourOk = today && Math.abs(hourSum - today.cny) < 0.01;
+    console.log(`  ${hourOk ? 'PASS' : 'FAIL'} 分时花费回落本地估算并归一到当日金额：合计=¥${hourSum.toFixed(2)} 当日=¥${(today?.cny ?? 0).toFixed(2)}`);
+    if (!hourOk) smokeFailures += 1;
   } catch (error) {
     console.log(`  FAIL 混合口径：${error?.message ?? error}`);
     smokeFailures += 1;

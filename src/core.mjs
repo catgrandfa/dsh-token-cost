@@ -263,7 +263,9 @@ function blankBucket() {
       offPeak: { hit: 0, miss: 0, out: 0, cny: 0, calls: 0 },
     },
     firstTime: null, lastTime: null,
+    // 按小时：tokens 与花费各一份 —— 面板「今日分时用量」要支持 token / 花费两种视角
     byHour: new Array(24).fill(0),
+    byHourCny: new Array(24).fill(0),
     models: new Map(),
   };
 }
@@ -294,7 +296,9 @@ function accumulate(bucket, usage, model, ms, cost) {
   } else {
     bucket.unpricedCalls += 1;
   }
-  bucket.byHour[hourOf(ms)] += (usage.inputTokens || 0) + (usage.cacheReadTokens || 0) + (usage.outputTokens || 0);
+  const hour = hourOf(ms);
+  bucket.byHour[hour] += (usage.inputTokens || 0) + (usage.cacheReadTokens || 0) + (usage.outputTokens || 0);
+  if (cost) bucket.byHourCny[hour] += cost.cny;
   if (model) bucket.models.set(model, (bucket.models.get(model) || 0) + 1);
 }
 
@@ -314,6 +318,7 @@ function packBucket(b) {
     firstTime: b.firstTime, lastTime: b.lastTime,
     hitRate: totalIn > 0 ? Number(((100 * b.hit) / totalIn).toFixed(1)) : null,
     byHour: b.byHour,
+    byHourCny: b.byHourCny.map((v) => Number(v.toFixed(6))),
     models: Object.fromEntries(b.models),
     tier: b.tier ? { peak: packTier(b.tier.peak), offPeak: packTier(b.tier.offPeak) } : undefined,
   };
@@ -328,7 +333,10 @@ function mergeBucket(dst, src) {
   for (const key of ['hit', 'miss', 'out', 'cacheWrite']) dst.costByType[key] += src.costByType?.[key] ?? 0;
   if (src.firstTime != null && (dst.firstTime == null || src.firstTime < dst.firstTime)) dst.firstTime = src.firstTime;
   if (src.lastTime != null && (dst.lastTime == null || src.lastTime > dst.lastTime)) dst.lastTime = src.lastTime;
-  for (let i = 0; i < 24; i += 1) dst.byHour[i] += src.byHour[i];
+  for (let i = 0; i < 24; i += 1) {
+    dst.byHour[i] += src.byHour[i];
+    dst.byHourCny[i] += src.byHourCny?.[i] ?? 0;
+  }
   for (const tier of ['peak', 'offPeak']) {
     const a = dst.tier[tier], b = src.tier[tier];
     a.hit += b.hit; a.miss += b.miss; a.out += b.out; a.cny += b.cny; a.calls += b.calls;

@@ -14,6 +14,16 @@ const tot = Object.values(data.days).reduce((a, e) => ({
   calls: a.calls + e.calls, miss: a.miss + e.miss, hit: a.hit + e.hit, out: a.out + e.out, cny: a.cny + e.cny,
 }), { calls: 0, miss: 0, hit: 0, out: 0, cny: 0 });
 console.log(`TOTAL calls=${tot.calls} miss=${tot.miss} hit=${tot.hit} out=${tot.out} CNY=${tot.cny.toFixed(3)}`);
+// 分时花费不变量：每天的 byHourCny 之和 = 当天金额（分时柱的花费视角靠这个口径才自洽）
+const hourCostBad = Object.entries(data.days).filter(([, e]) => {
+  const sum = (e.byHourCny ?? []).reduce((acc, v) => acc + v, 0);
+  return e.cny > 0 && Math.abs(sum - e.cny) > Math.max(0.01, e.cny * 1e-3);
+});
+if (hourCostBad.length) {
+  console.error(`FAIL: 分时花费之和与当日金额不一致（允许 1‰ 四舍五入误差）: ${hourCostBad.map(([day, e]) => `${day} sum=${(e.byHourCny ?? []).reduce((a, v) => a + v, 0).toFixed(4)} cny=${e.cny.toFixed(4)}`).join('; ')}`);
+  process.exit(1);
+}
+console.log('hour-cost invariant OK（每天 byHourCny 之和 = 当日 cny）');
 console.log('\n-- providers --');
 console.log(`  （计费口径：${OFFICIAL_PROVIDERS.join(' / ')}，其他 provider 只记 token）`);
 for (const [p, v] of Object.entries(data.providers)) {
